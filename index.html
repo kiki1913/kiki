@@ -247,6 +247,28 @@
           </div>
         </section>
 
+        <!-- USERLAR -->
+        <section class="section" id="sec-users">
+          <div class="sec-head">
+            <h2>Userlar (<span id="userCount">0</span>)</h2><div class="grow"></div>
+            <button class="btn btn--ghost" style="height:38px;padding:0 16px" onclick="drawUsers()">
+              <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h5M20 20v-5h-5M4.6 9a8 8 0 0114.3-2.3M19.4 15A8 8 0 015 17.3"/></svg>Yangilash</button>
+          </div>
+          <div class="card card-pad">
+            <div class="fmt-note">
+              <svg fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path stroke-linecap="round" d="M12 16v-4M12 8h.01"/></svg>
+              <div>
+                Mobil ilovada <b>ro'yxatdan o'tgan</b> foydalanuvchilar shu yerda ko'rinadi. Har bir user uchun
+                <b>User haqida</b> (ism, telefon, manzil), <b>xabar yuborish</b> va <b>o'chirish</b> mavjud.
+                <span class="muted">Parollar bu yerga yuborilmaydi — faqat ism, telefon va manzil.</span>
+              </div>
+            </div>
+            <div class="table-wrap"><table class="tbl"><thead><tr>
+              <th>Foydalanuvchi</th><th>Telefon</th><th></th>
+            </tr></thead><tbody id="userBody"></tbody></table></div>
+          </div>
+        </section>
+
         <!-- TELEGRAM BOT -->
         <section class="section" id="sec-bot">
           <div class="sec-head"><h2>Telegram bot</h2><div class="grow"></div></div>
@@ -313,7 +335,7 @@
 
   <!-- Supabase + Cloud qatlami -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="cloud.js?v=2"></script>
-  <script src="js/admin.js?v=2"></script>
+  <script src="cloud.js?v=3"></script>
+  <script src="js/admin.js?v=3"></script>
 </body>
 </html>

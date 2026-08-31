@@ -65,6 +65,7 @@ let products = [], orders = [], banners = [], settings = { brand: 'LUMÉ', phone
 let archivedOrders = [];  // arxivlangan (o'chirilgan) buyurtmalar — lume_orders_archive
 let promos = [];          // chegirma bo'limlari — lume_promos
 let commissions = [];     // pul o'tkazma komissiyalari — lume_commissions [{id,name,pct}]
+let users = [];           // ro'yxatdan o'tgan foydalanuvchilar — lume_users [{id,name,phone,addr,ts}]
 let chatMsgs = [];
 let editImg = null, editKey = 'found';
 let editFit = 'contain', editZoom = 1, editPosX = 50, editPosY = 50;
@@ -95,6 +96,7 @@ const ICONS = {
   banner: '<svg fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2.5"/><circle cx="8.5" cy="10" r="1.6"/><path stroke-linecap="round" stroke-linejoin="round" d="M4 16l4.5-4 3 2.5L15 11l5 5"/></svg>',
   orders: '<svg fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><rect x="4.5" y="3.5" width="15" height="17" rx="3"/><path stroke-linecap="round" d="M8.8 8.6h6.4M8.8 12h6.4M8.8 15.4h3.6"/></svg>',
   chat: '<svg fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M8 10.5h8M8 14h5M21 12a8 8 0 01-11.5 7.2L3 21l1.8-6.5A8 8 0 1121 12z"/></svg>',
+  users: '<svg fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M17 20v-1.5a3.5 3.5 0 00-3.5-3.5h-6A3.5 3.5 0 004 18.5V20"/><circle cx="10.5" cy="8" r="3.3"/><path stroke-linecap="round" stroke-linejoin="round" d="M20 20v-1.3a3 3 0 00-2.3-2.9M16 5.2a3 3 0 010 5.6"/></svg>',
   qr: '<svg fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><rect x="3.5" y="3.5" width="7" height="7" rx="1.5"/><rect x="13.5" y="3.5" width="7" height="7" rx="1.5"/><rect x="3.5" y="13.5" width="7" height="7" rx="1.5"/><path stroke-linecap="round" d="M14 14h3M20 14v3M17 17v3.5M20.5 20.5H20M14 20.5h.5"/></svg>',
   settings: '<svg fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path stroke-linecap="round" stroke-linejoin="round" d="M19.4 15a1.7 1.7 0 00.3 1.9l.1.1a2 2 0 11-2.8 2.8l-.1-.1a1.7 1.7 0 00-2.9 1.2 2 2 0 11-4 0 1.7 1.7 0 00-2.9-1.2l-.1.1a2 2 0 11-2.8-2.8l.1-.1A1.7 1.7 0 004.6 15a1.7 1.7 0 00-1.5-1H3a2 2 0 110-4h.1A1.7 1.7 0 004.6 9a1.7 1.7 0 00-.3-1.9l-.1-.1a2 2 0 112.8-2.8l.1.1A1.7 1.7 0 0010 3.6 1.7 1.7 0 0011 2.1V2a2 2 0 114 0v.1A1.7 1.7 0 0016 3.6a1.7 1.7 0 001.9-.3l.1-.1a2 2 0 112.8 2.8l-.1.1a1.7 1.7 0 00-.3 1.9 1.7 1.7 0 001.5 1H22a2 2 0 110 4h-.1a1.7 1.7 0 00-1.5 1z"/></svg>',
   admins: '<svg fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M16 20v-1.5a3.5 3.5 0 00-3.5-3.5h-5A3.5 3.5 0 004 18.5V20"/><circle cx="10" cy="8" r="3.2"/><path stroke-linecap="round" stroke-linejoin="round" d="M19 20v-1.2a3 3 0 00-2.2-2.9M15.5 5.2a3 3 0 010 5.6"/></svg>',
@@ -132,12 +134,13 @@ const NAV = [
   ['orders', 'Buyurtmalar', 'Kelgan buyurtmalar'],
   ['arxiv', 'Arxiv', 'O\'chirilgan buyurtmalar'],
   ['chat', 'Habarlar', 'Mijozlar bilan xabarlashuv'],
+  ['users', 'Userlar', 'Ro\'yxatdan o\'tgan foydalanuvchilar'],
   ['bot', 'Telegram bot', 'Buyurtmalarni kanalga ulash'],
   ['settings', 'Sozlamalar', 'Do\'kon ma\'lumotlari'],
   ['admins', 'Adminlar', 'Adminlarni boshqarish']
 ];
 // Yangi admin uchun belgilanadigan menyular (admins bundan tashqari — faqat bosh admin).
-const PERM_KEYS = ['dash', 'stats', 'prods', 'cats', 'banner', 'orders', 'arxiv', 'chat', 'bot', 'settings'];
+const PERM_KEYS = ['dash', 'stats', 'prods', 'cats', 'banner', 'orders', 'arxiv', 'chat', 'users', 'bot', 'settings'];
 // Mobil tab-barda ko'rinishi mumkin bo'lgan bo'limlar (ruxsatga qarab filtr qilinadi).
 const TAB_KEYS = ['dash', 'prods', 'orders', 'chat', 'settings'];
 
@@ -187,6 +190,7 @@ function nav(s) {
   if (s === 'orders') drawOrders();
   if (s === 'arxiv') drawArxiv();
   if (s === 'chat') drawChat();
+  if (s === 'users') drawUsers();
   if (s === 'bot') drawBot();
   if (s === 'settings') drawSettings();
   if (s === 'admins') drawAdmins();
@@ -1286,7 +1290,10 @@ function drawChat() {
     </div>`).join('')
     : `<div class="empty" style="padding:40px 16px"><h4 class="muted">Hali suhbatlar yo'q</h4></div>`;
 
-  const sel = chatConversations().find(c => c.name === chatSelected);
+  let sel = chatConversations().find(c => c.name === chatSelected);
+  // Userlar bo'limidan "Xabar yuborish" bosilganda suhbat hali bo'lmasligi mumkin —
+  // shunda bo'sh suhbat ochamiz (birinchi xabar shu yerdan yoziladi).
+  if (!sel && chatSelected) sel = { name: chatSelected, msgs: [] };
   if (!sel) {
     if (grid) grid.classList.remove('show-conv');
     conv.innerHTML = `<div class="conv-empty">Chapdan suhbatni tanlang yoki bozordan "Sotuvchi bilan xabarlashish" orqali boshlang.</div>`;
@@ -1342,6 +1349,69 @@ setInterval(() => {
   const sec = $('sec-chat');
   if (sec && sec.classList.contains('is-active')) refreshChat();
 }, 6000);
+
+/* ===== USERLAR (ro'yxatdan o'tgan foydalanuvchilar) ===== */
+let _usersSig = '';
+function userById(id) { return users.find(u => String(u.id) === String(id)); }
+
+function drawUsers() {
+  const cnt = $('userCount'); if (cnt) cnt.textContent = users.length;
+  const body = $('userBody'); if (!body) return;
+  const list = users.slice().sort((a, b) => (b.ts || 0) - (a.ts || 0)); // yangilari tepada
+  body.innerHTML = list.length
+    ? list.map(u => `
+      <tr>
+        <td><div class="cell-prod"><div class="emo">👤</div><div><b>${esc(u.name || '—')}</b><br><small class="muted">${u.ts ? new Date(u.ts).toLocaleDateString('ru-RU') : ''}</small></div></div></td>
+        <td><span class="num">${esc(u.phone || '—')}</span></td>
+        <td><div class="act-btns" style="justify-content:flex-end;flex-wrap:wrap;gap:6px">
+          <button class="btn btn--ghost" style="height:32px;padding:0 12px;font-size:12.5px" onclick="userInfo('${esc(u.id)}')">${ICONS.info}User haqida</button>
+          <button class="iact" onclick="messageUser('${esc(u.id)}')" title="Xabar yuborish" aria-label="Xabar">${ICONS.chat}</button>
+          <button class="iact danger" onclick="delUser('${esc(u.id)}')" title="O'chirish" aria-label="O'chirish">${ICONS.del}</button>
+        </div></td>
+      </tr>`).join('')
+    : `<tr><td colspan="3"><div class="empty"><div class="e-emo">👤</div><h4>Hali foydalanuvchi yo'q</h4><p class="muted">Mobil ilovada ro'yxatdan o'tgan foydalanuvchilar shu yerda ko'rinadi.</p></div></td></tr>`;
+}
+
+function userInfo(id) {
+  const u = userById(id); if (!u) return;
+  const row = (label, val) => `<div class="field span2"><label>${label}</label>
+    <div style="padding:11px 14px;background:var(--surface-2);border:1px solid var(--border);border-radius:10px;font-weight:600;font-size:14px">${esc(val || '—')}</div></div>`;
+  const body = `<div class="form-grid">
+      ${row('Ism', u.name)}
+      ${row('Telefon raqami', u.phone)}
+      ${row('Manzil', u.addr)}
+    </div>
+    <p class="muted" style="font-size:12px;margin-top:14px">Ro'yxatdan o'tgan: ${u.ts ? new Date(u.ts).toLocaleString('ru-RU') : '—'}</p>`;
+  const foot = `<button class="btn btn--ghost" onclick="closeModal()">Yopish</button>
+    <button class="btn btn--primary" onclick="closeModal();messageUser('${esc(u.id)}')">Xabar yuborish</button>`;
+  openModal('User haqida', body, foot);
+}
+
+function messageUser(id) {
+  const u = userById(id); if (!u) return;
+  chatSelected = (u.name || '').trim() || 'Mijoz';
+  nav('chat'); // habarlar menyusi ochiladi, shu user tanlangan holda
+}
+
+function delUser(id) {
+  const u = userById(id); if (!u) return;
+  if (!confirm(`"${u.name || 'Foydalanuvchi'}"ni o'chirmoqchimisiz?\n\nHaqiqatan ham ishonchingiz komilmi?`)) return;
+  users = users.filter(x => String(x.id) !== String(id));
+  cset('lume_users', users);
+  drawUsers();
+  toast('Foydalanuvchi o\'chirildi');
+}
+
+// Userlar bo'limi ochiq bo'lsa — fonda yangilab turamiz.
+setInterval(() => {
+  const sec = $('sec-users');
+  if (!sec || !sec.classList.contains('is-active')) return;
+  const cu = cget('lume_users', null);
+  const arr = Array.isArray(cu) ? cu.filter(x => x && x.id) : [];
+  const sig = arr.length + ':' + arr.reduce((s, u) => Math.max(s, u.ts || 0), 0);
+  if (sig === _usersSig) return;
+  _usersSig = sig; users = arr; drawUsers();
+}, 8000);
 
 /* ===== SETTINGS ===== */
 function drawSettings() {
@@ -1648,6 +1718,8 @@ function loadData() {
   if (cs && typeof cs === 'object') settings = Object.assign(settings, cs);
   const ccm = cget('lume_commissions', null);
   commissions = Array.isArray(ccm) ? ccm.filter(x => x && x.id && x.name) : [];
+  const cu = cget('lume_users', null);
+  users = Array.isArray(cu) ? cu.filter(x => x && x.id) : [];
 }
 
 function fmtDate() {
@@ -1728,6 +1800,7 @@ Object.assign(window, {
   drawPromos, openPromo, setPromoStyle, togglePromoProd, savePromo, delPromo, movePromo,
   setOrdFilter, drawArxiv, restoreOrder, delArxiv, clearArxiv,
   drawChat, sendAdminChat, refreshChat, setChatFilter, selectConv, backChat, toggleStar, toggleArchive, saveSettings, flip, closeModal,
+  drawUsers, userInfo, messageUser, delUser,
   openAdmin, saveAdmin, delAdmin, togglePerm, logout,
   drawBot, botSaveTest, botTestOrder, botDisconnect
 });
