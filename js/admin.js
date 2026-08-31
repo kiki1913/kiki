@@ -182,6 +182,7 @@ function nav(s) {
   const meta = NAV.find(n => n[0] === s) || ['', 'Boshqaruv paneli'];
   $('pageTitle').textContent = meta[1];
   if ($('sidebar')) $('sidebar').classList.remove('open');
+  if ($('sidebarScrim')) $('sidebarScrim').classList.remove('show');
   if (s === 'dash') drawDash();
   if (s === 'stats') drawStats();
   if (s === 'prods') drawProds();
@@ -305,7 +306,7 @@ function openPromo(id) {
           <div class="promo-thumb">${pic(p)}</div>
           <div style="flex:1;min-width:0">
             <b style="font-size:13px;display:block">${esc(p.n)}</b>
-            <small class="muted">${som(p.p)}${p.old ? ` · <span style="color:var(--red)">-${Math.round((1 - p.p / p.old) * 100)}%</span>` : ''}</small>
+            <small class="muted">${som(p.p)}${(p.old > p.p) ? ` · <span style="color:var(--red)">-${Math.round((1 - p.p / p.old) * 100)}%</span>` : ''}</small>
           </div>
         </div>`).join('') : '<div class="muted" style="padding:10px 0">Avval mahsulot qo\'shing</div>'}
     </div>`;
@@ -488,29 +489,72 @@ function statsBuckets() {
   return buckets;
 }
 
+// Ustunni yumaloq tepali qilib chizadigan yo'l (path).
+function barPath(x, y, w, h, r) {
+  const base = y + h;
+  r = Math.max(0, Math.min(r, w / 2, h));
+  return `M${x} ${base} L${x} ${y + r} Q${x} ${y} ${x + r} ${y} `
+    + `L${x + w - r} ${y} Q${x + w} ${y} ${x + w} ${y + r} L${x + w} ${base} Z`;
+}
+
+// Chiroyli yaxlit maksimum (o'q shkalasi uchun): 1..2..2.5..5..10 * 10^k
+function niceCeil(v) {
+  v = +v || 0;
+  if (v <= 0) return 1;
+  const mag = Math.pow(10, Math.floor(Math.log10(v)));
+  const norm = v / mag;
+  const step = norm <= 1 ? 1 : norm <= 2 ? 2 : norm <= 2.5 ? 2.5 : norm <= 5 ? 5 : 10;
+  return step * mag;
+}
+
 // Ustunli diagramma (mustaqil SVG — tashqi kutubxonasiz).
+// Zamonaviy: yumshoq to'r chiziqlari, yumaloq tepali gradient ustunlar,
+// joriy davr ustuni ajratilgan, o'q/qiymat yorliqlari va silliq animatsiya.
 function statsChartSVG(buckets) {
   const n = buckets.length;
   const max = Math.max(1, ...buckets.map(b => b.rev));
-  const slot = 56, padX = 16, padTop = 26, chartH = 168, padBot = 30, bw = 30;
-  const W = padX * 2 + n * slot, H = padTop + chartH + padBot;
+  const niceMax = niceCeil(max);
+  const slot = 46, padL = 36, padR = 12, padTop = 18, chartH = 150, padBot = 24;
+  const bw = Math.min(16, slot - 26); // nozik ustunlar
+  const W = padL + padR + n * slot, H = padTop + chartH + padBot;
+  const baseY = padTop + chartH;
+
+  // To'r chiziqlari + Y o'q yorliqlari
+  const LEVELS = 4;
+  let grid = '';
+  for (let i = 0; i <= LEVELS; i++) {
+    const gy = padTop + chartH * (i / LEVELS);
+    const val = niceMax * (1 - i / LEVELS);
+    grid += `<line class="bc-grid${i === LEVELS ? ' base' : ''}" x1="${padL}" y1="${gy.toFixed(1)}" x2="${W - padR}" y2="${gy.toFixed(1)}"/>`;
+    grid += `<text class="bc-ylab" x="${padL - 9}" y="${(gy + 3.5).toFixed(1)}" text-anchor="end">${shortNum(val)}</text>`;
+  }
+
   let bars = '';
   buckets.forEach((b, i) => {
-    const cx = padX + i * slot + slot / 2;
+    const cx = padL + i * slot + slot / 2;
     const x = cx - bw / 2;
-    const h = Math.max(2, Math.round(chartH * (b.rev / max)));
-    const y = padTop + (chartH - h);
-    bars += `<g>
+    const h = Math.max(3, chartH * (b.rev / niceMax));
+    const y = baseY - h;
+    const isCur = i === n - 1; // oxirgi (joriy) davr — ajratib ko'rsatamiz
+    bars += `<g class="bc-col" style="--d:${(i * 0.05).toFixed(2)}s">
       <title>${esc(b.label)}: ${som(b.rev)} — ${b.cnt} buyurtma</title>
-      <rect class="bc-bar" x="${x}" y="${y}" width="${bw}" height="${h}" rx="6" fill="url(#bcg)"></rect>
-      <text x="${cx}" y="${y - 7}" text-anchor="middle" font-size="11" font-weight="700">${b.rev ? shortNum(b.rev) : ''}</text>
-      <text x="${cx}" y="${H - 10}" text-anchor="middle" font-size="11" opacity=".8">${esc(b.label)}</text>
+      <path class="bc-bar${isCur ? ' is-cur' : ''}" d="${barPath(x, y, bw, h, 7)}" fill="url(#${isCur ? 'bcg2' : 'bcg'})"/>
+      ${b.rev ? `<text class="bc-val" x="${cx}" y="${(y - 8).toFixed(1)}" text-anchor="middle">${shortNum(b.rev)}</text>` : ''}
+      <text class="bc-xlab" x="${cx}" y="${H - 8}" text-anchor="middle">${esc(b.label)}</text>
     </g>`;
   });
+
   return `<div class="chart-wrap"><svg class="bar-chart" viewBox="0 0 ${W} ${H}" preserveAspectRatio="xMidYMid meet" role="img" aria-label="Tushum dinamikasi">
-    <defs><linearGradient id="bcg" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0" style="stop-color:var(--green)"/><stop offset="100%" style="stop-color:var(--green-700)"/>
-    </linearGradient></defs>${bars}</svg></div>`;
+    <defs>
+      <linearGradient id="bcg" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0" stop-color="var(--green)"/><stop offset="1" stop-color="var(--green-700)"/>
+      </linearGradient>
+      <linearGradient id="bcg2" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0" stop-color="#5eead4"/><stop offset="1" stop-color="var(--green-600)"/>
+      </linearGradient>
+    </defs>
+    ${grid}${bars}
+  </svg></div>`;
 }
 
 // Berilgan oynada mahsulot bo'yicha sotuv (nomi -> {name, qty, rev}).
@@ -669,7 +713,7 @@ function drawProds() {
       <td><div class="cell-prod"><div class="emo">${pic(p)}</div><div><b>${esc(p.n)}</b><br><small class="muted">${esc(p.br || '')}</small></div></div></td>
       <td><span class="pill">${esc(catName(p.c)) || '—'}</span></td>
       <td><span class="num">${som(p.p)}</span></td>
-      <td>${p.old ? `<span class="pill cancel">-${Math.round((1 - p.p / p.old) * 100)}%</span>` : '<span class="muted">—</span>'}</td>
+      <td>${(p.old > p.p) ? `<span class="pill cancel">-${Math.round((1 - p.p / p.old) * 100)}%</span>` : '<span class="muted">—</span>'}</td>
       <td><div class="act-btns" style="justify-content:flex-end">
         <button class="iact" onclick="openProd(${p.id})" aria-label="Tahrir">${ICONS.edit}</button>
         <button class="iact danger" onclick="delProd(${p.id})" aria-label="O'chirish">${ICONS.del}</button>
@@ -1040,27 +1084,46 @@ function arxivRow(o) {
     </div></td>
   </tr>`;
 }
-function restoreOrder(id) {
-  const i = archivedOrders.findIndex(x => x.id === id); if (i < 0) return;
+async function restoreOrder(id) {
+  await Cloud.refresh();
+  orders = cget('lume_orders', []) || [];
+  archivedOrders = cget('lume_orders_archive', []) || [];
+  const i = archivedOrders.findIndex(x => x.id === id);
+  if (i < 0) { drawArxiv(); return; }
   const o = archivedOrders.splice(i, 1)[0];
   orders.unshift(o);
   orders.sort((a, b) => (b.ts || 0) - (a.ts || 0));
   cset('lume_orders', orders); cset('lume_orders_archive', archivedOrders);
   drawArxiv(); drawDash(); toast('Buyurtma tiklandi');
 }
-function delArxiv(id) {
+async function delArxiv(id) {
   if (!confirm('Buyurtma butunlay o\'chirilsinmi? Buni tiklab bo\'lmaydi.')) return;
+  await Cloud.refresh();
+  archivedOrders = cget('lume_orders_archive', []) || [];
   archivedOrders = archivedOrders.filter(x => x.id !== id);
   cset('lume_orders_archive', archivedOrders);
   drawArxiv(); toast('Butunlay o\'chirildi');
 }
-function clearArxiv() {
+async function clearArxiv() {
   if (!archivedOrders.length) return;
   if (!confirm('Arxivdagi BARCHA buyurtmalar butunlay o\'chirilsinmi?')) return;
-  archivedOrders = []; cset('lume_orders_archive', archivedOrders);
+  await Cloud.refresh();
+  archivedOrders = [];
+  cset('lume_orders_archive', archivedOrders);
   drawArxiv(); toast('Arxiv tozalandi');
 }
-function setStatus(id, st) { const o = orders.find(x => x.id === id); if (o) { o.status = st; cset('lume_orders', orders); drawOrders(); drawDash(); toast('Holat yangilandi') } }
+async function setStatus(id, st) {
+  // refresh → merge → write: serverdan eng yangi ro'yxatni olamiz (admin ochiq
+  // turганda mijoz qo'shgan yangi buyurtmalar ham), so'ng shu buyurtma holatini
+  // o'zgartirib qayta yozamiz — aks holda yangi buyurtmalar o'chib ketardi.
+  await Cloud.refresh();
+  orders = cget('lume_orders', []) || [];
+  const o = orders.find(x => x.id === id);
+  if (!o) { drawOrders(); return; }
+  o.status = st;
+  cset('lume_orders', orders);
+  drawOrders(); drawDash(); toast('Holat yangilandi');
+}
 
 // To'lov turi yorlig'i (ilova bilan bir xil)
 function payLabel(p) { return ({ card: 'Karta (Uzcard / Humo)', payme: 'Payme', click: 'Click', cash: 'Naqd' })[p] || 'Naqd'; }
@@ -1185,21 +1248,58 @@ function downloadReceipt(id) {
   } catch (e) { toast('Chekni yuklab bo\'lmadi', 'err'); }
 }
 // O'chirish endi arxivга ko'chiradi (butunlay yo'q qilmaydi).
-function delOrder(id) {
-  const i = orders.findIndex(x => x.id === id); if (i < 0) return;
+async function delOrder(id) {
+  await Cloud.refresh();
+  orders = cget('lume_orders', []) || [];
+  archivedOrders = cget('lume_orders_archive', []) || [];
+  const i = orders.findIndex(x => x.id === id);
+  if (i < 0) { closeModal(); drawOrders(); return; }
   const o = orders.splice(i, 1)[0];
   archivedOrders.unshift(o);
   cset('lume_orders', orders); cset('lume_orders_archive', archivedOrders);
   closeModal(); drawOrders(); drawDash(); toast('Arxivga ko\'chirildi');
 }
-function clearOrders() {
+async function clearOrders() {
   if (!orders.length) return;
   if (!confirm('Barcha buyurtmalar arxivga ko\'chirilsinmi?')) return;
+  await Cloud.refresh();
+  orders = cget('lume_orders', []) || [];
+  archivedOrders = cget('lume_orders_archive', []) || [];
   archivedOrders = orders.concat(archivedOrders);
   orders = [];
   cset('lume_orders', orders); cset('lume_orders_archive', archivedOrders);
   drawOrders(); drawDash(); toast('Hammasi arxivlandi');
 }
+
+// Buyurtmalarni serverdan qayta yuklaydi (qo'lda tugma va avtomatik interval uchun).
+async function refreshOrders(showToast) {
+  await Cloud.refresh();
+  orders = cget('lume_orders', []) || [];
+  archivedOrders = cget('lume_orders_archive', []) || [];
+  _ordersSig = _ordersSignature(orders);
+  drawOrders(); drawDash();
+  if (showToast) toast('Buyurtmalar yangilandi');
+}
+function _ordersSignature(arr) {
+  return arr.length + ':' + arr.reduce((s, o) => Math.max(s, o.ts || 0), 0)
+    + ':' + arr.map(o => o.status || '').join(',');
+}
+// Buyurtmalar bo'limi ochiq bo'lsa — har 10 soniyada serverdan yangilaymiz.
+// cget faqat keshdan o'qigani uchun avval refresh() qilamiz. Ma'lumot
+// o'zgargandagina qayta chizamiz (_usersSig uslubidagi taqqoslash).
+let _ordersSig = '';
+setInterval(async () => {
+  const sec = $('sec-orders');
+  if (!sec || !sec.classList.contains('is-active')) return;
+  await Cloud.refresh();
+  const arr = cget('lume_orders', []) || [];
+  const sig = _ordersSignature(arr);
+  if (sig === _ordersSig) return;
+  _ordersSig = sig;
+  orders = arr;
+  archivedOrders = cget('lume_orders_archive', []) || [];
+  drawOrders(); drawDash();
+}, 10000);
 
 /* ===== XABARLAR (chat) — ikki ustunli ===== */
 let chatFilter = 'all';   // all | day | week | month | muhim | arxiv
@@ -1337,7 +1437,9 @@ function sendAdminChat() {
 }
 let _chatSig = '';
 async function refreshChat() {
-  try { await Cloud.init('lume', window.__LUME_CLIENT || STORE_CLIENT); } catch (e) { }
+  // MUHIM: Cloud.init() _cache va _dirty ni TOZALAYDI (yozilib ulgurmagan
+  // o'zgarishlarni yo'qotishi mumkin). Shuning uchun refresh() ishlatamiz.
+  try { await Cloud.refresh(); } catch (e) { }
   const cch = cget('lume_chat', []); chatMsgs = Array.isArray(cch) ? cch : [];
   // Xabarlar o'zgarmagan bo'lsa qayta chizmaymiz — yozilayotgan javob saqlanadi.
   const sig = chatMsgs.length + ':' + chatMsgs.reduce((s, m) => Math.max(s, m.ts || 0), 0);
@@ -1393,9 +1495,13 @@ function messageUser(id) {
   nav('chat'); // habarlar menyusi ochiladi, shu user tanlangan holda
 }
 
-function delUser(id) {
+async function delUser(id) {
   const u = userById(id); if (!u) return;
   if (!confirm(`"${u.name || 'Foydalanuvchi'}"ni o'chirmoqchimisiz?\n\nHaqiqatan ham ishonchingiz komilmi?`)) return;
+  // refresh → merge → write: serverdagi eng yangi ro'yxatni olib, undan o'chiramiz
+  // (boshqa yangi ro'yxatdan o'tganlarni yo'qotmaslik uchun).
+  await Cloud.refresh();
+  const cur = cget('lume_users', []); users = Array.isArray(cur) ? cur : [];
   users = users.filter(x => String(x.id) !== String(id));
   cset('lume_users', users);
   drawUsers();
@@ -1403,9 +1509,12 @@ function delUser(id) {
 }
 
 // Userlar bo'limi ochiq bo'lsa — fonda yangilab turamiz.
-setInterval(() => {
+// MUHIM: cget faqat XOTIRADAGI keshdan o'qiydi — avval serverdan refresh() qilamiz,
+// aks holda yangi ro'yxatdan o'tganlar (Chat bo'limi ochilmasa) umuman ko'rinmaydi.
+setInterval(async () => {
   const sec = $('sec-users');
   if (!sec || !sec.classList.contains('is-active')) return;
+  await Cloud.refresh();
   const cu = cget('lume_users', null);
   const arr = Array.isArray(cu) ? cu.filter(x => x && x.id) : [];
   const sig = arr.length + ':' + arr.reduce((s, u) => Math.max(s, u.ts || 0), 0);
@@ -1735,7 +1844,16 @@ function fmtDate() {
   try { const th = localStorage.getItem('lume_admin_theme'); if (th) document.documentElement.dataset.theme = th; } catch (e) { }
   syncTheme();
   $('themeBtn').onclick = flip;
-  $('burger').onclick = () => $('sidebar').classList.toggle('open');
+  // Mobil menyu (drawer) — burger ochadi/yopadi, orqa fon bosilsa yopiladi.
+  function toggleDrawer(open) {
+    const sb = $('sidebar'), sc = $('sidebarScrim');
+    const willOpen = open === undefined ? !sb.classList.contains('open') : open;
+    sb.classList.toggle('open', willOpen);
+    if (sc) sc.classList.toggle('show', willOpen);
+  }
+  $('burger').onclick = () => toggleDrawer();
+  const _scrim = $('sidebarScrim');
+  if (_scrim) _scrim.onclick = () => toggleDrawer(false);
   const td = $('topDate'); if (td) td.textContent = fmtDate();
 
   buildNav();
@@ -1796,7 +1914,7 @@ Object.assign(window, {
   nav, drawStats, setStatsPeriod, addCommission, delCommission,
   openProd, saveProd, delProd, refreshPrev, setFit, onImg, removeImg,
   openCat, saveCat, delCat, onCatImg, onCatImgR, removeCatImg, removeCatImgR, setCatFit, setCatFitR, refreshCatPrev, refreshCatPrevR,
-  onBannerFiles, moveBanner, delBanner, setStatus, delOrder, clearOrders, openOrder, downloadReceipt,
+  onBannerFiles, moveBanner, delBanner, setStatus, delOrder, clearOrders, refreshOrders, openOrder, downloadReceipt,
   drawPromos, openPromo, setPromoStyle, togglePromoProd, savePromo, delPromo, movePromo,
   setOrdFilter, drawArxiv, restoreOrder, delArxiv, clearArxiv,
   drawChat, sendAdminChat, refreshChat, setChatFilter, selectConv, backChat, toggleStar, toggleArchive, saveSettings, flip, closeModal,

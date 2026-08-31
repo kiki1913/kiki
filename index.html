@@ -52,6 +52,9 @@
       </div>
     </aside>
 
+    <!-- Mobil menyu ochilganda orqa fon (bosilsa yopiladi) -->
+    <div class="sidebar-scrim" id="sidebarScrim" aria-hidden="true"></div>
+
     <!-- ============ MAIN ============ -->
     <main class="main">
 
@@ -198,6 +201,7 @@
         <section class="section" id="sec-orders">
           <div class="sec-head">
             <h2>Buyurtmalar (<span id="ordCount">0</span>)</h2><div class="grow"></div>
+            <button class="btn btn--ghost" style="height:38px;padding:0 16px" onclick="refreshOrders(true)">Yangilash</button>
             <button class="btn btn--danger" style="height:38px;padding:0 16px" onclick="clearOrders()">Hammasini arxivlash</button>
           </div>
           <div class="card card-pad msg-filter-card" id="ordFilters" style="margin-bottom:16px"></div>

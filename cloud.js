@@ -90,6 +90,33 @@ window.Cloud = (function () {
       }
     },
 
+    // Serverdan barcha kalitlarni qayta yuklaydi va _cache ni yangilaydi.
+    // init()dan FARQI: _dirty ni TOZALAMAYDI — shu sessiyada yozilgan, ammo server
+    // hali TASDIQLAMAGAN qiymatlar ustun qoladi (set() server javobidan keyin _dirty'ni
+    // tozalaydi, shuning uchun bu yerda faqat haqiqatan kutilayotgan yozuvlar qoladi).
+    // "refresh → merge → write" naqshi uchun ishlatiladi: yozishdan oldin serverdagi
+    // eng yangi ro'yxatni (boshqa mijoz/qurilma qo'shgan yozuvlar bilan) olish uchun.
+    // Qaytaradi: muvaffaqiyatda true, aks holda false.
+    async refresh() {
+      if (!_sb) return false; // localStorage rejimi — server yo'q
+      try {
+        const { data, error } = await _sb
+          .from("app_state").select("key,value")
+          .eq("app", this.app).eq("client_id", this.client);
+        if (error) { console.error("[Cloud] refresh:", error); return false; }
+        const merged = {};
+        (data || []).forEach((r) => { merged[r.key] = r.value; });
+        // Hali serverga yetib bormagan (tasdiqlanmagan) yozuvlar ustun turadi.
+        Object.keys(this._dirty).forEach((k) => { merged[k] = this._dirty[k]; });
+        this._cache = merged;
+        this.mode = "cloud";
+        return true;
+      } catch (e) {
+        console.error("[Cloud] refresh (network):", e);
+        return false;
+      }
+    },
+
     // SINXRON o'qish (localStorage.getItem o'rnida)
     get(key, fallback = null) {
       if (this.mode === "cloud") {
@@ -115,7 +142,12 @@ window.Cloud = (function () {
             { app: this.app, client_id: this.client, key, value, updated_at: new Date().toISOString() },
             { onConflict: "app,client_id,key" }
           )
-          .then(({ error }) => { if (error) console.error("[Cloud] set:", error); });
+          .then(({ error }) => {
+            if (error) { console.error("[Cloud] set:", error); return; }
+            // Server tasdiqladi — bu kalitni _dirty'dan olib tashlaymiz, shunda keyingi
+            // refresh() serverdagi (boshqalar ham yozgan) eng yangi qiymatni oladi.
+            if (this._dirty[key] === value) delete this._dirty[key];
+          });
       }
     },
 
