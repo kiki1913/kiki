@@ -292,11 +292,22 @@
             </div>
             <div style="margin-top:18px"><button class="btn btn--primary" onclick="saveSettings()">Saqlash</button></div>
           </div>
+          <div class="card card-pad" id="superCard" style="margin-bottom:16px">
+            <div class="card-head" style="padding:0 0 16px;margin-bottom:16px"><h3>Bosh admin hisobi</h3></div>
+            <div class="form-grid">
+              <div class="field"><label>Ism</label><input class="input" id="supName" placeholder="Bosh admin"></div>
+              <div class="field"><label>Login (username)</label><input class="input" id="supLogin" placeholder="tiro" autocomplete="off"></div>
+              <div class="field span2"><label>Joriy parol *</label><input class="input" id="supPassCur" type="password" placeholder="Joriy parolingiz" autocomplete="current-password"></div>
+              <div class="field"><label>Yangi parol</label><input class="input" id="supPassNew" type="password" placeholder="Bo'sh qoldirsangiz o'zgarmaydi" autocomplete="new-password"></div>
+              <div class="field"><label>Yangi parolni tasdiqlang</label><input class="input" id="supPassNew2" type="password" placeholder="Yangi parolni takrorlang" autocomplete="new-password"></div>
+            </div>
+            <p class="muted" style="font-size:12px;margin-top:12px;line-height:1.5">Login yoki parolni o'zgartirish uchun <b>joriy parolni</b> kiriting. Parolni o'zgartirmasangiz — "Yangi parol"ni bo'sh qoldiring.</p>
+            <div style="margin-top:14px"><button class="btn btn--primary" onclick="saveSuper()">Bosh admin ma'lumotlarini saqlash</button></div>
+          </div>
           <div class="card card-pad">
             <div class="card-head" style="padding:0 0 16px;margin-bottom:16px"><h3>Sinxronizatsiya</h3></div>
             <p style="font-size:13px;color:var(--text-2);line-height:1.7">
-              Ma'lumotlar <b id="clientLabel">shop</b> mijoz kaliti ostida saqlanadi. <span id="syncNote"></span><br>
-              Do'kon havolasi: <code id="shopUrl" style="font-size:12px;color:var(--green)"></code></p>
+              Ma'lumotlar <b id="clientLabel">shop</b> mijoz kaliti ostida saqlanadi. <span id="syncNote"></span></p>
           </div>
         </section>
 

@@ -118,8 +118,20 @@ const ICONS = {
 };
 
 /* ===== ADMINLAR / AUTH ===== */
-// Bosh admin — kod ichida qat'iy. O'chirib bo'lmaydi, barcha menyularni ko'radi.
+// Bosh admin — boshlang'ich (default) qiymatlar. O'chirib bo'lmaydi, barcha menyularni ko'radi.
+// Login/parol/ism serverdagi lume_super kaliti orqali o'zgartirilishi mumkin.
 const SUPER = { id: 'super', login: 'tiro', pass: 'tiro00', name: 'Bosh admin', role: 'super' };
+let superCfg = {};      // serverdagi bosh admin sozlamalari (lume_super): {login,pass,name}
+// Amaldagi (effektiv) bosh admin — default ustiga serverdagi o'zgarishlar qo'yiladi.
+function superAcc() {
+  return {
+    id: 'super',
+    role: 'super',
+    login: (superCfg && superCfg.login) || SUPER.login,
+    pass: (superCfg && superCfg.pass) || SUPER.pass,
+    name: (superCfg && superCfg.name) || SUPER.name,
+  };
+}
 let admins = [];        // qo'shimcha adminlar (lume_admins)
 let currentAdmin = null; // hozir kirgan admin
 
@@ -1529,9 +1541,15 @@ function drawSettings() {
   $('setPhone').value = settings.phone || '';
   $('setTg').value = settings.tg || '';
   $('clientLabel').textContent = window.__LUME_CLIENT || 'shop';
-  const url = new URL('index.html', location.href);
-  if ((window.__LUME_CLIENT || 'shop') !== 'shop') url.searchParams.set('client', window.__LUME_CLIENT);
-  $('shopUrl').textContent = url.href;
+  // Bosh admin hisobi karti — faqat bosh adminga ko'rinadi, maydonlar to'ldiriladi.
+  const sc = $('superCard');
+  if (sc) sc.style.display = isSuper() ? '' : 'none';
+  const sa = superAcc();
+  if ($('supName')) $('supName').value = sa.name || '';
+  if ($('supLogin')) $('supLogin').value = sa.login || '';
+  if ($('supPassCur')) $('supPassCur').value = '';
+  if ($('supPassNew')) $('supPassNew').value = '';
+  if ($('supPassNew2')) $('supPassNew2').value = '';
 }
 function saveSettings() {
   settings = {
@@ -1541,6 +1559,42 @@ function saveSettings() {
     tg: $('setTg').value.trim()
   };
   cset('lume_settings', settings); toast('Sozlamalar saqlandi');
+}
+
+// Bosh admin login / parol / ismini o'zgartirish (joriy parol bilan tasdiqlanadi).
+async function saveSuper() {
+  if (!isSuper()) { toast('Faqat bosh admin o\'zgartira oladi', 'err'); return; }
+  const name = ($('supName').value || '').trim();
+  const login = ($('supLogin').value || '').trim();
+  const cur = $('supPassCur').value || '';
+  const np = $('supPassNew').value || '';
+  const np2 = $('supPassNew2').value || '';
+  const sup = superAcc();
+  if (!login) { toast('Login bo\'sh bo\'lmasin', 'err'); return; }
+  if (cur !== sup.pass) { toast('Joriy parol noto\'g\'ri', 'err'); return; }
+  // Login boshqa admin bilan to'qnashmasin
+  if (admins.some(a => (a.login || '').toLowerCase() === login.toLowerCase())) {
+    toast('Bu login boshqa adminda band', 'err'); return;
+  }
+  let newPass = sup.pass;
+  if (np || np2) {
+    if (np.length < 4) { toast('Yangi parol kamida 4 belgi bo\'lsin', 'err'); return; }
+    if (np !== np2) { toast('Yangi parollar mos kelmadi', 'err'); return; }
+    newPass = np;
+  }
+  // refresh → merge → write
+  await Cloud.refresh();
+  superCfg = { login, pass: newPass, name: name || sup.name };
+  cset('lume_super', superCfg);
+  // Joriy sessiyani yangilaymiz (login o'zgargan bo'lsa ham qayta kirish shart bo'lmaydi).
+  if (currentAdmin && currentAdmin.role === 'super') {
+    currentAdmin = superAcc();
+    setSession(currentAdmin);
+    const pn = $('profName'); if (pn) pn.textContent = currentAdmin.name || currentAdmin.login;
+  }
+  $('supPassCur').value = ''; $('supPassNew').value = ''; $('supPassNew2').value = '';
+  toast('Bosh admin ma\'lumotlari saqlandi');
+  const sec = $('sec-admins'); if (sec && sec.classList.contains('is-active')) drawAdmins();
 }
 
 /* ===== TELEGRAM BOT ===== */
@@ -1681,10 +1735,11 @@ function botDisconnect() {
 function permLabel(s) { const n = NAV.find(x => x[0] === s); return n ? n[1] : s; }
 function drawAdmins() {
   $('adminCount').textContent = admins.length + 1; // +1 = bosh admin
+  const sup = superAcc();
   const rowSuper = `
     <tr>
-      <td><div class="cell-prod"><div class="emo">👑</div><div><b>${esc(SUPER.name)}</b><br><small class="muted">Barcha menyular</small></div></div></td>
-      <td><span class="num">${esc(SUPER.login)}</span></td>
+      <td><div class="cell-prod"><div class="emo">👑</div><div><b>${esc(sup.name)}</b><br><small class="muted">Barcha menyular</small></div></div></td>
+      <td><span class="num">${esc(sup.login)}</span></td>
       <td><span class="pill done">Barchasi</span></td>
       <td><span class="pill faol">Bosh admin</span></td>
       <td></td>
@@ -1735,7 +1790,7 @@ function saveAdmin(id) {
   const pass = $('a-pass').value;
   if (!login) { toast('Login kiriting', 'err'); return; }
   if (!pass) { toast('Parol kiriting', 'err'); return; }
-  if (login.toLowerCase() === SUPER.login.toLowerCase()) { toast('Bu login band (bosh admin)', 'err'); return; }
+  if (login.toLowerCase() === superAcc().login.toLowerCase()) { toast('Bu login band (bosh admin)', 'err'); return; }
   const dup = admins.find(x => x.login.toLowerCase() === login.toLowerCase() && x.id !== id);
   if (dup) { toast('Bu login allaqachon mavjud', 'err'); return; }
   const perms = [...document.querySelectorAll('#permList .perm-item.on')].map(el => el.dataset.p);
@@ -1757,12 +1812,14 @@ function delAdmin(id) {
 const SESSION_KEY = 'lume_admin_session';
 function resolveAdmin(login) {
   if (!login) return null;
-  if (login.toLowerCase() === SUPER.login.toLowerCase()) return SUPER;
+  const sup = superAcc();
+  if (login.toLowerCase() === sup.login.toLowerCase()) return sup;
   return admins.find(x => x.login.toLowerCase() === login.toLowerCase()) || null;
 }
 function tryLogin(login, pass) {
   login = (login || '').trim();
-  if (login.toLowerCase() === SUPER.login.toLowerCase()) return pass === SUPER.pass ? SUPER : null;
+  const sup = superAcc();
+  if (login.toLowerCase() === sup.login.toLowerCase()) return pass === sup.pass ? sup : null;
   const a = admins.find(x => x.login.toLowerCase() === login.toLowerCase());
   return (a && a.pass === pass) ? a : null;
 }
@@ -1797,6 +1854,8 @@ function restoreSession() {
 function loadData() {
   const ca = cget('lume_admins', null);
   admins = Array.isArray(ca) ? ca.filter(a => a && a.login && a.id) : [];
+  const csup = cget('lume_super', null);
+  superCfg = (csup && typeof csup === 'object') ? csup : {};
   const cbot = cget('lume_bot', null);
   if (cbot && typeof cbot === 'object') botCfg = Object.assign({ token: '', channel: '', username: '', enabled: false }, cbot);
   const cmeta = cget('lume_chat_meta', null);
@@ -1917,7 +1976,7 @@ Object.assign(window, {
   onBannerFiles, moveBanner, delBanner, setStatus, delOrder, clearOrders, refreshOrders, openOrder, downloadReceipt,
   drawPromos, openPromo, setPromoStyle, togglePromoProd, savePromo, delPromo, movePromo,
   setOrdFilter, drawArxiv, restoreOrder, delArxiv, clearArxiv,
-  drawChat, sendAdminChat, refreshChat, setChatFilter, selectConv, backChat, toggleStar, toggleArchive, saveSettings, flip, closeModal,
+  drawChat, sendAdminChat, refreshChat, setChatFilter, selectConv, backChat, toggleStar, toggleArchive, saveSettings, saveSuper, flip, closeModal,
   drawUsers, userInfo, messageUser, delUser,
   openAdmin, saveAdmin, delAdmin, togglePerm, logout,
   drawBot, botSaveTest, botTestOrder, botDisconnect
