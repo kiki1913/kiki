@@ -908,6 +908,31 @@ select.input { cursor: pointer; }
 .up-rm { background: none; border: none; cursor: pointer; font-size: 11.5px; color: var(--red); padding: 6px 2px; margin-left: 2px; }
 .up-hint { font-size: 10.5px; color: var(--text-3); margin-top: 7px; line-height: 1.4; }
 
+/* Ko'p rasmli galereya (mahsulot rasmlari) */
+.p-imgs-strip { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 16px; }
+.p-imgs-strip:empty { display: none; }
+.p-imgs-thumb {
+  position: relative; width: 72px; height: 72px; flex: none;
+  border-radius: 12px; overflow: hidden; background: var(--surface-3);
+  border: 1px solid var(--border);
+}
+.p-imgs-thumb.is-main { border-color: var(--green); box-shadow: 0 0 0 2px rgba(34, 197, 94, .28); }
+.p-imgs-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.p-imgs-badge {
+  position: absolute; left: 4px; bottom: 4px;
+  font-size: 8.5px; font-weight: 700; color: #04130a; background: var(--green);
+  padding: 2px 6px; border-radius: 6px;
+}
+.p-imgs-del, .p-imgs-star {
+  position: absolute; top: 3px; width: 20px; height: 20px; cursor: pointer;
+  display: grid; place-items: center; border: none; border-radius: 50%;
+  font-size: 11px; line-height: 1; color: #fff;
+}
+.p-imgs-del { right: 3px; background: rgba(220, 38, 38, .92); }
+.p-imgs-del:hover { background: var(--red); }
+.p-imgs-star { left: 3px; background: rgba(0, 0, 0, .55); color: #ffd54a; font-size: 12px; }
+.p-imgs-star:hover { background: rgba(0, 0, 0, .8); }
+
 .fit-ctl { margin: 2px 0 16px; }
 .fit-ctl.dim { opacity: .4; pointer-events: none; }
 .fitpills { display: flex; gap: 10px; margin-bottom: 14px; }
@@ -1193,3 +1218,19 @@ body.authed .login-screen { display: none; }
 .comm-add .field { margin: 0; }
 .comm-total { margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--border); font-size: 13px; color: var(--text-2); line-height: 1.9; }
 .comm-total b { color: var(--green); }
+
+/* Real daromad ramkasi */
+.pf-list { display: flex; flex-direction: column; }
+.pf-row {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 11px 2px; font-size: 14px; color: var(--text-2);
+  border-bottom: 1px dashed var(--border);
+}
+.pf-row b { font-weight: 800; font-size: 14.5px; }
+.pf-row.pf-total {
+  margin-top: 6px; padding: 14px 14px; border-bottom: none;
+  background: rgba(34, 197, 94, .08); border: 1px solid rgba(34, 197, 94, .22);
+  border-radius: 12px; font-weight: 700; color: var(--text);
+}
+.pf-row.pf-total span { font-size: 15px; }
+.pf-row.pf-total b { font-size: 18px; letter-spacing: -.3px; }

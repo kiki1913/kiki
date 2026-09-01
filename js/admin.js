@@ -65,9 +65,12 @@ let products = [], orders = [], banners = [], settings = { brand: 'LUMÉ', phone
 let archivedOrders = [];  // arxivlangan (o'chirilgan) buyurtmalar — lume_orders_archive
 let promos = [];          // chegirma bo'limlari — lume_promos
 let commissions = [];     // pul o'tkazma komissiyalari — lume_commissions [{id,name,pct}]
+let monthlyExpense = 0;   // oylik harajatlar (ijara, ish haqi va h.k.) — lume_expenses (son)
 let users = [];           // ro'yxatdan o'tgan foydalanuvchilar — lume_users [{id,name,phone,addr,ts}]
 let chatMsgs = [];
 let editImg = null, editKey = 'found';
+let editImgs = [];            // mahsulot rasmlari (10 tagacha). editImg = editImgs[0] (asosiy/karta rasmi)
+const MAX_PROD_IMGS = 10;
 let editFit = 'contain', editZoom = 1, editPosX = 50, editPosY = 50;
 let editImgR = null, editFitR = 'contain', editZoomR = 1, editPosXR = 50, editPosYR = 50;
 function editObj() { return { img: editImg, k: editKey, fit: editFit, zoom: editZoom, pos: editPosX + '% ' + editPosY + '%' }; }
@@ -610,7 +613,14 @@ function drawStats() {
   const ordCnt = buckets.reduce((s, b) => s + b.cnt, 0);
   const pct = totalPct();
   const commAmt = revenue * pct / 100;
-  const net = revenue - commAmt;
+
+  // Davr oynasi — tan narxi va oylik harajatlarni hisoblash uchun.
+  const rStart = buckets.length ? buckets[0].start : 0;
+  const rEnd = buckets.length ? buckets[buckets.length - 1].end : Date.now();
+  const costTotal = periodCost(rStart, rEnd);                 // sotilgan mahsulotlar tan narxi
+  const periodDays = Math.max(1, Math.round((rEnd - rStart) / 864e5));
+  const expenses = Math.round(monthlyExpense * periodDays / 30); // oylik harajat — davr ulushi
+  const realProfit = revenue - commAmt - costTotal - expenses;   // REAL daromad
 
   // Sarlavha + davr chiplari
   const sub = $('statsSub'); if (sub) sub.textContent = cfg.label + ' bo\'yicha';
@@ -623,7 +633,7 @@ function drawStats() {
     { bg: 'rgba(139,92,246,.15)', emo: '💰', v: num(revenue), l: "Tushum, so'm" },
     { bg: 'rgba(59,130,246,.15)', emo: '🧾', v: ordCnt, l: 'Buyurtma' },
     { bg: 'rgba(245,158,11,.15)', emo: '📉', v: num(Math.round(commAmt)), l: `Komissiya (${(+pct.toFixed(2))}%)` },
-    { bg: 'rgba(34,197,94,.15)', emo: '💵', v: num(Math.round(net)), l: "Sof foyda, so'm" }
+    { bg: 'rgba(34,197,94,.15)', emo: '💵', v: num(Math.round(realProfit)), l: "Real daromad, so'm" }
   ];
   $('statsKpi').innerHTML = cards.map(c => `
     <div class="kpi">
@@ -632,17 +642,15 @@ function drawStats() {
       <div class="kval">${c.v}</div>
     </div>`).join('');
 
-  // Chart
-  const ct = $('statsChartTitle'); if (ct) ct.textContent = pct > 0 ? 'Sof foyda dinamikasi' : 'Tushum dinamikasi';
-  const cs = $('statsChartSub'); if (cs) cs.textContent = cfg.label + (pct > 0 ? ` · komissiya ${(+pct.toFixed(2))}% hisobga olingan` : '');
-  // Komissiya foizini har bir ustunga qo'llaymiz (real foyda ko'rinishi uchun).
-  const factor = 1 - pct / 100;
-  const chartBuckets = pct > 0 ? buckets.map(b => ({ ...b, rev: b.rev * factor })) : buckets;
-  $('statsChart').innerHTML = ordCnt ? statsChartSVG(chartBuckets) : STATS_EMPTY('📊', 'Bu davrda ma\'lumot yo\'q');
+  // Chart — TUSHUM (mahsulot sotilgan narxlari). Diagramma foyda emas, tushumni ko'rsatadi.
+  const ct = $('statsChartTitle'); if (ct) ct.textContent = 'Tushum dinamikasi';
+  const cs = $('statsChartSub'); if (cs) cs.textContent = cfg.label + ' · sotuv summasi';
+  $('statsChart').innerHTML = ordCnt ? statsChartSVG(buckets) : STATS_EMPTY('📊', 'Bu davrda ma\'lumot yo\'q');
+
+  // Real daromad ramkasi + oylik harajat kiritish
+  drawProfit(revenue, costTotal, commAmt, expenses, realProfit, periodDays);
 
   // Mahsulot tahlili (shu oyna ichida)
-  const rStart = buckets.length ? buckets[0].start : 0;
-  const rEnd = buckets.length ? buckets[buckets.length - 1].end : Date.now();
   const map = productSales(rStart, rEnd);
   const sold = [...map.values()].filter(m => m.name !== '—');
   const best = sold.slice().sort((a, b) => b.qty - a.qty).slice(0, 6);
@@ -691,9 +699,57 @@ function drawCommission(revenue) {
       <button class="btn btn--primary" onclick="addCommission()" style="height:44px">Qo'shish</button>
     </div>
     <div class="comm-total">
-      Umumiy komissiya: <b style="color:var(--amber)">${(+pct.toFixed(2))}%</b> — davr tushumidan <b style="color:var(--amber)">${som(Math.round(commAmt))}</b> ushlanadi.<br>
-      Tushum ${som(revenue)} → <b>real daromad: ${som(Math.round(net))}</b>
+      Umumiy komissiya: <b style="color:var(--amber)">${(+pct.toFixed(2))}%</b> — davr tushumidan <b style="color:var(--amber)">${som(Math.round(commAmt))}</b> ushlanadi.
     </div>`;
+}
+
+// Sotilgan mahsulotlarning tan narxi (davr oynasida) — sof foyda uchun.
+function periodCost(rStart, rEnd) {
+  let cost = 0;
+  for (const o of saleOrders()) {
+    const t = +o.ts; if (t < rStart || t >= rEnd) continue;
+    for (const it of (o.items || [])) {
+      const p = products.find(x => String(x.n || '').trim() === String(it && it.n || '').trim());
+      const c = p ? (+p.cost || 0) : 0;
+      cost += c * (+it.q || 0);
+    }
+  }
+  return cost;
+}
+
+// Real daromad ramkasi: tushum − tan narxi − komissiya − oylik harajat = real daromad.
+function drawProfit(revenue, costTotal, commAmt, expenses, realProfit, periodDays) {
+  const el = $('statsProfit'); if (!el) return;
+  const row = (label, val, neg, strong) => `
+    <div class="pf-row${strong ? ' pf-total' : ''}">
+      <span>${label}</span>
+      <b style="color:${strong ? (realProfit >= 0 ? 'var(--green)' : 'var(--red)') : (neg ? 'var(--red)' : 'var(--text)')}">${neg && val ? '− ' : ''}${som(Math.round(val))}</b>
+    </div>`;
+  el.innerHTML = `
+    <div class="card-head" style="padding:0 0 14px;margin-bottom:14px">
+      <div><h3>Real daromad</h3><div class="sub">Komissiya, mahsulot tan narxi va oylik harajatlar ayirilgan sof daromad</div></div>
+    </div>
+    <div class="pf-list">
+      ${row('Tushum (sotuvlar)', revenue, false, false)}
+      ${row('Mahsulot tan narxi', costTotal, true, false)}
+      ${row('Komissiya', commAmt, true, false)}
+      ${row(`Oylik harajatlar (${periodDays} kun ulushi)`, expenses, true, false)}
+      ${row('Real daromad', realProfit, false, true)}
+    </div>
+    <div class="comm-add" style="margin-top:16px">
+      <div class="field" style="flex:1;min-width:180px"><label>Oylik harajatlar (so'm)</label>
+        <input class="input" id="expInput" inputmode="numeric" placeholder="Masalan: 3000000" value="${monthlyExpense || ''}" onkeydown="if(event.key==='Enter')saveExpenses()"></div>
+      <button class="btn btn--primary" onclick="saveExpenses()" style="height:44px">Saqlash</button>
+    </div>
+    <div class="muted" style="font-size:12px;margin-top:10px;line-height:1.5">Oylik harajatlar (ijara, ish haqi, reklama va h.k.) bir marta kiritiladi va serverda saqlanadi. Tanlangan davr uchun kunlar ulushi bo'yicha hisoblanadi.</div>`;
+}
+
+function saveExpenses() {
+  const v = +String($('expInput').value || '').replace(/\D/g, '') || 0;
+  monthlyExpense = v;
+  cset('lume_expenses', v);
+  drawStats();
+  toast('Oylik harajatlar saqlandi');
 }
 
 function setStatsPeriod(p) { if (STATS_CFG[p]) { statsPeriod = p; drawStats(); } }
@@ -735,7 +791,9 @@ function drawProds() {
 }
 function openProd(id) {
   const p = id ? products.find(x => x.id === id) : null;
-  editImg = p ? p.img || null : null;
+  // Rasmlar: yangi imgs massivi bo'lsa undan, aks holda eski yagona img'dan.
+  editImgs = p ? (Array.isArray(p.imgs) && p.imgs.length ? p.imgs.slice(0, MAX_PROD_IMGS) : (p.img ? [p.img] : [])) : [];
+  editImg = editImgs[0] || null;
   editKey = p ? (p.k || 'found') : 'found';
   editFit = p && p.fit === 'cover' ? 'cover' : 'contain';
   editZoom = p && p.zoom ? +p.zoom : 1;
@@ -744,18 +802,18 @@ function openProd(id) {
   const body = `
     <p class="muted" style="font-size:12.5px;margin-bottom:16px">Do'kon katalogida ko'rinadi.</p>
     <div class="img-pick">
-      <div class="img-prev" id="img-prev">${pic(editObj())}<span class="pv-tag">Karta ko'rinishi</span></div>
+      <div class="img-prev" id="img-prev">${pic(editObj())}<span class="pv-tag">Karta rasmi</span></div>
       <div style="flex:1">
-        <div class="field"><label>Mahsulot rasmi</label>
+        <div class="field"><label>Mahsulot rasmlari (<span id="p-imgs-count">${editImgs.length}</span>/${MAX_PROD_IMGS})</label>
           <div style="display:flex;align-items:center;flex-wrap:wrap;gap:6px">
-            <label class="up-btn">${ICONS.upload}<span>Rasm yuklash</span>
-              <input type="file" accept="image/*" id="p-img" onchange="onImg(event)"></label>
-            <button type="button" class="up-rm" id="up-rm" onclick="removeImg()" style="${editImg ? '' : 'display:none'}">Olib tashlash</button>
+            <label class="up-btn" id="p-img-btn">${ICONS.upload}<span>Rasm qo'shish</span>
+              <input type="file" accept="image/*" id="p-img" multiple onchange="onImg(event)"></label>
           </div>
-          <div class="up-hint">JPG / PNG — istalgan o'lcham (avtomatik siqiladi)</div>
+          <div class="up-hint">Birinchi rasm — karta rasmi. 10 tagacha rasm qo'shishingiz mumkin (avtomatik siqiladi).</div>
         </div>
       </div>
     </div>
+    <div class="p-imgs-strip" id="p-imgs-strip"></div>
     <div class="fit-ctl ${editImg ? '' : 'dim'}" id="fit-ctl">
       <div class="fitpills">
         <button type="button" id="fit-contain" class="${editFit === 'contain' ? 'on' : ''}" onclick="setFit('contain')">Butun rasm</button>
@@ -770,6 +828,7 @@ function openProd(id) {
       <div class="field"><label>Kategoriya</label><select class="input" id="p-c">${categories.length ? categories.map(c => `<option value="${c.id}" ${p && p.c == c.id ? 'selected' : ''}>${esc(c.name)}</option>`).join('') : '<option value="">— toifa yo\'q —</option>'}</select></div>
       <div class="field"><label>Narx (so'm) *</label><input class="input" id="p-p" inputmode="numeric" value="${p ? p.p : ''}" placeholder="250000"></div>
       <div class="field"><label>Eski narx (chegirma)</label><input class="input" id="p-old" inputmode="numeric" value="${p && p.old ? p.old : ''}" placeholder="0 = yo'q"></div>
+      <div class="field"><label>Tan narxi (asil narx)</label><input class="input" id="p-cost" inputmode="numeric" value="${p && p.cost ? p.cost : ''}" placeholder="Sof foyda uchun"></div>
       <div class="field span2"><label>Hajm (vergul bilan)</label><input class="input" id="p-sz" value="${esc(p && p.sz ? p.sz.join(', ') : '')}" placeholder="30ml, 50ml"></div>
       <div class="field span2"><label>Tavsif (o'zbekcha)</label><textarea class="input" id="p-d">${esc(p && p.d ? (p.d.uz || '') : '')}</textarea></div>
     </div>`;
@@ -777,6 +836,19 @@ function openProd(id) {
     <button class="btn btn--ghost" onclick="closeModal()">Bekor</button>
     <button class="btn btn--primary" onclick="saveProd(${p ? p.id : 'null'})">Saqlash</button>`;
   openModal(p ? 'Mahsulotni tahrirlash' : 'Yangi mahsulot', body, foot);
+  renderProdImgs();
+}
+// Rasmlar tasmasini (thumbnails) chizadi — har birida "asosiy qilish" va "o'chirish".
+function renderProdImgs() {
+  const strip = $('p-imgs-strip'); if (!strip) return;
+  strip.innerHTML = editImgs.map((src, i) => `
+    <div class="p-imgs-thumb${i === 0 ? ' is-main' : ''}">
+      <img src="${src}" alt="">
+      ${i === 0 ? '<span class="p-imgs-badge">Asosiy</span>' : `<button type="button" class="p-imgs-star" title="Asosiy qilish" onclick="makeMainImg(${i})">★</button>`}
+      <button type="button" class="p-imgs-del" title="O'chirish" onclick="removeImgAt(${i})">✕</button>
+    </div>`).join('');
+  const cnt = $('p-imgs-count'); if (cnt) cnt.textContent = editImgs.length;
+  const btn = $('p-img-btn'); if (btn) btn.style.display = editImgs.length >= MAX_PROD_IMGS ? 'none' : '';
 }
 function refreshPrev() {
   $('img-prev').innerHTML = pic(editObj()) + '<span class="pv-tag">Karta ko\'rinishi</span>';
@@ -789,32 +861,64 @@ function setFit(v) {
   $('fit-cover').classList.toggle('on', v === 'cover');
   refreshPrev();
 }
-function onImg(e) {
-  const f = e.target.files && e.target.files[0]; if (!f) return;
-  if (!/^image\//.test(f.type)) { toast('Faqat rasm faylini tanlang', 'err'); e.target.value = ''; return }
-  const r = new FileReader();
-  r.onload = () => {
-    const im = new Image();
-    im.onload = () => {
-      const MAX = 900;
-      let { width: w, height: h } = im;
-      if (w > MAX || h > MAX) { const s = Math.min(MAX / w, MAX / h); w = Math.round(w * s); h = Math.round(h * s); }
-      const cv = document.createElement('canvas'); cv.width = w; cv.height = h;
-      const cx = cv.getContext('2d');
-      cx.fillStyle = '#ffffff'; cx.fillRect(0, 0, w, h);
-      cx.drawImage(im, 0, 0, w, h);
-      try { editImg = cv.toDataURL('image/jpeg', 0.82); } catch (err) { editImg = r.result; }
-      refreshPrev();
-      e.target.value = '';
-      toast('Rasm yuklandi');
+// Bitta rasm faylini siqib, data:URL qaytaradi (Promise).
+function compressImage(f) {
+  return new Promise((resolve, reject) => {
+    const r = new FileReader();
+    r.onload = () => {
+      const im = new Image();
+      im.onload = () => {
+        const MAX = 900;
+        let { width: w, height: h } = im;
+        if (w > MAX || h > MAX) { const s = Math.min(MAX / w, MAX / h); w = Math.round(w * s); h = Math.round(h * s); }
+        const cv = document.createElement('canvas'); cv.width = w; cv.height = h;
+        const cx = cv.getContext('2d');
+        cx.fillStyle = '#ffffff'; cx.fillRect(0, 0, w, h);
+        cx.drawImage(im, 0, 0, w, h);
+        try { resolve(cv.toDataURL('image/jpeg', 0.82)); } catch (err) { resolve(r.result); }
+      };
+      im.onerror = () => reject(new Error('image'));
+      im.src = r.result;
     };
-    im.onerror = () => { toast('Rasmni o\'qib bo\'lmadi', 'err'); };
-    im.src = r.result;
-  };
-  r.onerror = () => { toast('Faylni o\'qib bo\'lmadi', 'err'); };
-  r.readAsDataURL(f);
+    r.onerror = () => reject(new Error('file'));
+    r.readAsDataURL(f);
+  });
 }
-function removeImg() { editImg = null; const fi = $('p-img'); if (fi) fi.value = ''; refreshPrev(); }
+// Bir yoki bir nechta rasm tanlanganda — 10 tagacha qo'shadi.
+async function onImg(e) {
+  const files = Array.from(e.target.files || []).filter(f => /^image\//.test(f.type));
+  e.target.value = '';
+  if (!files.length) { toast('Faqat rasm faylini tanlang', 'err'); return; }
+  const room = MAX_PROD_IMGS - editImgs.length;
+  if (room <= 0) { toast(`Ko'pi bilan ${MAX_PROD_IMGS} ta rasm`, 'err'); return; }
+  const take = files.slice(0, room);
+  let added = 0;
+  for (const f of take) {
+    try { editImgs.push(await compressImage(f)); added++; } catch (err) { /* jimgina o'tamiz */ }
+  }
+  editImg = editImgs[0] || null;
+  refreshPrev();
+  renderProdImgs();
+  if (added) toast(added > 1 ? `${added} ta rasm qo'shildi` : 'Rasm qo\'shildi');
+  if (files.length > room) toast(`Faqat ${room} ta rasm qo'shildi (limit ${MAX_PROD_IMGS})`, 'err');
+}
+// Rasmni o'chirish (indeks bo'yicha).
+function removeImgAt(i) {
+  if (i < 0 || i >= editImgs.length) return;
+  editImgs.splice(i, 1);
+  editImg = editImgs[0] || null;
+  refreshPrev();
+  renderProdImgs();
+}
+// Rasmni "asosiy" (birinchi/karta rasmi) qilib oldinga ko'chiradi.
+function makeMainImg(i) {
+  if (i <= 0 || i >= editImgs.length) return;
+  const [im] = editImgs.splice(i, 1);
+  editImgs.unshift(im);
+  editImg = editImgs[0] || null;
+  refreshPrev();
+  renderProdImgs();
+}
 function saveProd(id) {
   const n = $('p-n').value.trim();
   const p = +$('p-p').value.replace(/\D/g, '');
@@ -824,8 +928,11 @@ function saveProd(id) {
     n, br: $('p-br').value.trim(),
     c: +$('p-c').value,
     p, old: +$('p-old').value.replace(/\D/g, '') || 0,
+    cost: +$('p-cost').value.replace(/\D/g, '') || 0,
     sz: $('p-sz').value.split(',').map(s => s.trim()).filter(Boolean),
-    k: editKey, img: editImg || null,
+    k: editKey,
+    imgs: editImgs.slice(0, MAX_PROD_IMGS),
+    img: editImgs[0] || null,  // birinchi rasm — karta rasmi (eski moslik uchun)
     fit: editFit, zoom: editZoom, pos: editPosX + '% ' + editPosY + '%',
     d: { uz: $('p-d').value.trim() }
   };
@@ -1886,6 +1993,8 @@ function loadData() {
   if (cs && typeof cs === 'object') settings = Object.assign(settings, cs);
   const ccm = cget('lume_commissions', null);
   commissions = Array.isArray(ccm) ? ccm.filter(x => x && x.id && x.name) : [];
+  const cexp = cget('lume_expenses', null);
+  monthlyExpense = +cexp || 0;
   const cu = cget('lume_users', null);
   users = Array.isArray(cu) ? cu.filter(x => x && x.id) : [];
 }
@@ -1970,8 +2079,8 @@ function fmtDate() {
 
 // global (onclick uchun)
 Object.assign(window, {
-  nav, drawStats, setStatsPeriod, addCommission, delCommission,
-  openProd, saveProd, delProd, refreshPrev, setFit, onImg, removeImg,
+  nav, drawStats, setStatsPeriod, addCommission, delCommission, saveExpenses,
+  openProd, saveProd, delProd, refreshPrev, setFit, onImg, removeImgAt, makeMainImg, renderProdImgs,
   openCat, saveCat, delCat, onCatImg, onCatImgR, removeCatImg, removeCatImgR, setCatFit, setCatFitR, refreshCatPrev, refreshCatPrevR,
   onBannerFiles, moveBanner, delBanner, setStatus, delOrder, clearOrders, refreshOrders, openOrder, downloadReceipt,
   drawPromos, openPromo, setPromoStyle, togglePromoProd, savePromo, delPromo, movePromo,
