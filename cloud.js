@@ -16,15 +16,15 @@
    ============================================================ */
 
 // >>> Supabase Settings → API dan oling <<<
-const SUPABASE_URL = "https://cdvbqpqaxpeuifhchxin.supabase.co";   // masalan: https://abcdefgh.supabase.co
-const SUPABASE_KEY = "sb_publishable_r2LEEGmDl7lWzFgFDgR67w_qJApgcp9";       // "anon public" kaliti (brauzerda ochiq turishi normal)
+const SUPABASE_URL = "https://kikiapp.uz";   // KIKI o'z serveri (Uztelecom)
+const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJyb2xlIjoiYW5vbiIsImlzcyI6InN1cGFiYXNlIiwiaWF0IjoxNzg4MzA3MjAwLCJleHAiOjIxMDM2NjcyMDB9.WFI2O4v_7uJ2MsadVgl2PlI-42y-SQfTf_rQ6ZcjweI";
 
 window.Cloud = (function () {
   // Sozlangan-sozlanmaganini aniqlaymiz. Placeholder yoki supabase kutubxonasi
   // yo'q bo'lsa — localStorage rejimiga o'tamiz (ilova baribir ishlaydi).
   const configured =
     typeof supabase !== "undefined" &&
-    /^https:\/\/[a-z0-9-]+\.supabase\.co/i.test(SUPABASE_URL) &&
+    /^https:\/\//i.test(SUPABASE_URL) &&
     typeof SUPABASE_KEY === "string" && SUPABASE_KEY.length > 30;
 
   let _sb = null;
