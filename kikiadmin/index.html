@@ -252,6 +252,27 @@
           </div>
         </section>
 
+        <!-- BILDIRISHNOMA (push) -->
+        <section class="section" id="sec-notif">
+          <div class="sec-head"><h2>Bildirishnoma yuborish</h2><div class="grow"></div></div>
+          <div class="card card-pad">
+            <div class="fmt-note">
+              <svg fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path stroke-linecap="round" d="M12 16v-4M12 8h.01"/></svg>
+              <div>
+                Xabar <b>barcha mijoz qurilmalariga</b> push sifatida yuboriladi va ilovadagi
+                <b>Bildirishnomalar</b> ekranida ko'rinadi. (Serverdagi push-worker avtomatik yuboradi.)
+              </div>
+            </div>
+            <div class="form-grid" style="margin-top:14px">
+              <div class="field"><label>Sarlavha</label><input class="input" id="notifTitle" maxlength="80" placeholder="Masalan: Chegirmalar boshlandi 🎉"></div>
+              <div class="field" style="grid-column:1/-1"><label>Matn</label><textarea class="input" id="notifBody" rows="3" maxlength="300" placeholder="Xabar matni (ixtiyoriy)"></textarea></div>
+            </div>
+            <div style="margin-top:14px">
+              <button class="btn btn--primary" id="notifSendBtn" onclick="sendNotification()">Yuborish</button>
+            </div>
+          </div>
+        </section>
+
         <!-- USERLAR -->
         <section class="section" id="sec-users">
           <div class="sec-head">

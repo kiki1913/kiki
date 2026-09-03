@@ -162,5 +162,19 @@ window.Cloud = (function () {
           .then(({ error }) => { if (error) console.error("[Cloud] remove:", error); });
       }
     },
+
+    // Push bildirishnoma yuborish — `notifications` jadvaliga INSERT qiladi.
+    // Worker (VPS) buni LISTEN/NOTIFY orqali ushlab, barcha qurilmalarga push yuboradi.
+    // Admin panelda alohida push-yuborish kodi kerak emas — faqat bazaga yozish.
+    async sendNotification(title, body) {
+      if (!_sb) throw new Error("Supabase sozlanmagan — bildirishnoma yuborib bo'lmaydi");
+      const { error } = await _sb.from("notifications").insert({
+        title: title,
+        body: body || "",
+        type: "broadcast",
+      });
+      if (error) throw error;
+      return true;
+    },
   };
 })();

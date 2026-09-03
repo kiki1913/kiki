@@ -1,0 +1,20 @@
+[Unit]
+Description=KIKI FCM push-worker
+After=network-online.target docker.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+# USER va yo'llarni o'zingizga moslang.
+User=YOUR_USER
+WorkingDirectory=/home/YOUR_USER/push-worker
+EnvironmentFile=/home/YOUR_USER/push-worker/.env
+ExecStart=/home/YOUR_USER/push-worker/.venv/bin/python /home/YOUR_USER/push-worker/worker.py
+Restart=always
+RestartSec=5
+# Loglar journalctl'ga tushadi
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

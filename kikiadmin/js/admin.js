@@ -104,6 +104,7 @@ const ICONS = {
   settings: '<svg fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path stroke-linecap="round" stroke-linejoin="round" d="M19.4 15a1.7 1.7 0 00.3 1.9l.1.1a2 2 0 11-2.8 2.8l-.1-.1a1.7 1.7 0 00-2.9 1.2 2 2 0 11-4 0 1.7 1.7 0 00-2.9-1.2l-.1.1a2 2 0 11-2.8-2.8l.1-.1A1.7 1.7 0 004.6 15a1.7 1.7 0 00-1.5-1H3a2 2 0 110-4h.1A1.7 1.7 0 004.6 9a1.7 1.7 0 00-.3-1.9l-.1-.1a2 2 0 112.8-2.8l.1.1A1.7 1.7 0 0010 3.6 1.7 1.7 0 0011 2.1V2a2 2 0 114 0v.1A1.7 1.7 0 0016 3.6a1.7 1.7 0 001.9-.3l.1-.1a2 2 0 112.8 2.8l-.1.1a1.7 1.7 0 00-.3 1.9 1.7 1.7 0 001.5 1H22a2 2 0 110 4h-.1a1.7 1.7 0 00-1.5 1z"/></svg>',
   admins: '<svg fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M16 20v-1.5a3.5 3.5 0 00-3.5-3.5h-5A3.5 3.5 0 004 18.5V20"/><circle cx="10" cy="8" r="3.2"/><path stroke-linecap="round" stroke-linejoin="round" d="M19 20v-1.2a3 3 0 00-2.2-2.9M15.5 5.2a3 3 0 010 5.6"/></svg>',
   bot: '<svg fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M21.5 4.5L2.5 11.8c-1 .4-1 1.8.1 2.1l4.6 1.4 1.7 5.2c.3.9 1.4 1 2 .3l2.5-2.7 4.6 3.4c.7.5 1.7.1 1.9-.7l3.1-14.6c.2-1-.8-1.9-1.9-1.4z"/><path stroke-linecap="round" stroke-linejoin="round" d="M7.2 15.3L18 7.5l-8 8.5"/></svg>',
+  notif: '<svg fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M18 8a6 6 0 10-12 0c0 7-3 9-3 9h18s-3-2-3-9M13.7 21a2 2 0 01-3.4 0"/></svg>',
   check: '<svg fill="none" stroke="currentColor" stroke-width="3" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>',
   eye: '<svg fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7z"/><circle cx="12" cy="12" r="3"/></svg>',
   star: '<svg fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 3l2.7 5.5 6 .9-4.35 4.24 1.03 6-5.38-2.83-5.38 2.83 1.03-6L3.3 9.4l6-.9z"/></svg>',
@@ -149,6 +150,7 @@ const NAV = [
   ['orders', 'Buyurtmalar', 'Kelgan buyurtmalar'],
   ['arxiv', 'Arxiv', 'O\'chirilgan buyurtmalar'],
   ['chat', 'Habarlar', 'Mijozlar bilan xabarlashuv'],
+  ['notif', 'Bildirishnoma', 'Barcha mijozlarga push xabar'],
   ['users', 'Userlar', 'Ro\'yxatdan o\'tgan foydalanuvchilar'],
   ['bot', 'Telegram bot', 'Buyurtmalarni kanalga ulash'],
   ['settings', 'Sozlamalar', 'Do\'kon ma\'lumotlari'],
@@ -210,6 +212,34 @@ function nav(s) {
   if (s === 'bot') drawBot();
   if (s === 'settings') drawSettings();
   if (s === 'admins') drawAdmins();
+  if (s === 'notif') drawNotif();
+}
+
+/* ===== BILDIRISHNOMA (push) ===== */
+function drawNotif() {
+  // Statik forma index.html'da; bu yerda maydonlarni tozalaymiz.
+  const t = $('notifTitle'), b = $('notifBody');
+  if (t) t.value = '';
+  if (b) b.value = '';
+}
+
+async function sendNotification() {
+  const title = ($('notifTitle') && $('notifTitle').value || '').trim();
+  const body = ($('notifBody') && $('notifBody').value || '').trim();
+  if (!title) { toast('Sarlavhani kiriting'); return; }
+  const btn = $('notifSendBtn');
+  if (btn) { btn.disabled = true; btn.textContent = 'Yuborilmoqda...'; }
+  try {
+    await Cloud.sendNotification(title, body);
+    toast('Bildirishnoma yuborildi — barcha mijozlarga push ketadi');
+    if ($('notifTitle')) $('notifTitle').value = '';
+    if ($('notifBody')) $('notifBody').value = '';
+  } catch (e) {
+    console.error('[notif] sendNotification:', e);
+    toast('Xatolik: yuborib bo\'lmadi');
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = 'Yuborish'; }
+  }
 }
 
 /* ===== MODAL (ovqat uslubi) ===== */
