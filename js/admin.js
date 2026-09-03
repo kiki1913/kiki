@@ -278,7 +278,28 @@ function delBanner(i) {
 
 /* ===== CHEGIRMA BO'LIMLARI ===== */
 let _promoSel = new Set();
-let _promoStyle = 'plain';
+let _promoStyle = 'white';
+// Baner fon ranglari (ilovadagi kalitlar bilan bir xil). 'white' = oddiy (rangsiz).
+const PROMO_COLORS = [
+  ['white', 'Oq (oddiy)', '#ffffff'],
+  ['pink', 'Pushti', '#e81e8c'],
+  ['purple', 'Binafsha', '#8b3dff'],
+  ['blue', 'Ko\'k', '#2563eb'],
+  ['green', 'Yashil', '#16a34a'],
+  ['orange', 'To\'q sariq', '#f97316'],
+  ['red', 'Qizil', '#ef4444'],
+  ['teal', 'Moviy', '#0d9488'],
+  ['gold', 'Oltin', '#f59e0b'],
+];
+// Eski 'plain' -> 'white'; noma'lum -> 'white'.
+function promoStyleKey(st) {
+  if (st === 'plain' || !st) return 'white';
+  return PROMO_COLORS.some(c => c[0] === st) ? st : 'white';
+}
+function promoColorInfo(st) {
+  const k = promoStyleKey(st);
+  return PROMO_COLORS.find(c => c[0] === k) || PROMO_COLORS[0];
+}
 function drawPromos() {
   const el = $('promoList'); if (!el) return;
   const pc = $('promoCount'); if (pc) pc.textContent = promos.length;
@@ -291,8 +312,8 @@ function drawPromos() {
       <div style="flex:1;min-width:0">
         <b style="font-size:14px">${esc(s.title) || '—'}</b>
         <div style="font-size:12px;margin-top:4px;display:flex;align-items:center;gap:6px">
-          <span class="pill ${s.style === 'pink' ? 'cancel' : 'done'}">${s.style === 'pink' ? 'Pushti' : 'Oddiy'}</span>
-          <span class="muted">${(s.items || []).length} ta mahsulot</span>
+          <span style="display:inline-flex;align-items:center;gap:5px"><span style="width:13px;height:13px;border-radius:50%;background:${promoColorInfo(s.style)[2]};border:1px solid var(--border-2);display:inline-block"></span>${promoColorInfo(s.style)[1]}</span>
+          <span class="muted">· ${(s.items || []).length} ta mahsulot</span>
         </div>
       </div>
       <button class="iact" onclick="openPromo('${s.id}')" title="Tahrir" aria-label="Tahrir">${ICONS.edit}</button>
@@ -303,15 +324,16 @@ function drawPromos() {
 function openPromo(id) {
   const s = id ? promos.find(x => x.id === id) : null;
   _promoSel = new Set(s ? (s.items || []) : []);
-  _promoStyle = s ? (s.style || 'plain') : 'plain';
+  _promoStyle = s ? promoStyleKey(s.style) : 'white';
   const body = `
     <div class="field"><label>Sarlavha *</label>
       <input class="input" id="pr-title" value="${esc(s ? s.title : '')}" placeholder="Masalan: Geltek -25% yoki Xitlar"></div>
-    <div class="field" style="margin-top:12px"><label>Uslub</label>
-      <div class="fitpills" id="pr-style">
-        <button type="button" data-st="plain" class="${_promoStyle === 'plain' ? 'on' : ''}" onclick="setPromoStyle('plain')">Oddiy</button>
-        <button type="button" data-st="pink" class="${_promoStyle === 'pink' ? 'on' : ''}" onclick="setPromoStyle('pink')">Pushti (rangli fon)</button>
+    <div class="field" style="margin-top:12px"><label>Baner fon rangi</label>
+      <div class="promo-swatches" id="pr-style">
+        ${PROMO_COLORS.map(([k, label, col]) => `
+          <button type="button" class="promo-swatch ${_promoStyle === k ? 'on' : ''}" data-st="${k}" title="${label}" onclick="setPromoStyle('${k}')" style="--sw:${col}"></button>`).join('')}
       </div>
+      <p class="bot-hint" id="pr-style-lbl">${promoColorInfo(_promoStyle)[1]}${_promoStyle === 'white' ? ' — rangli fon yo\'q' : ' — kartalar shaffof (frosted) bo\'ladi'}</p>
     </div>
     <div class="cat-sec-t" style="margin-top:16px">Mahsulotlar (<span id="pr-cnt">${_promoSel.size}</span>)</div>
     <div class="promo-picker" id="pr-list">
@@ -333,6 +355,8 @@ function openPromo(id) {
 function setPromoStyle(st) {
   _promoStyle = st;
   document.querySelectorAll('#pr-style button').forEach(b => b.classList.toggle('on', b.dataset.st === st));
+  const lbl = $('pr-style-lbl');
+  if (lbl) lbl.textContent = promoColorInfo(st)[1] + (st === 'white' ? ' — rangli fon yo\'q' : ' — kartalar shaffof (frosted) bo\'ladi');
 }
 function togglePromoProd(id) {
   if (_promoSel.has(id)) _promoSel.delete(id); else _promoSel.add(id);
