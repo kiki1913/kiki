@@ -64,8 +64,13 @@ const DEFAULT_PRODUCTS = [];
 let products = [], orders = [], banners = [], settings = { brand: 'LUMÉ', phone: '+998 71 200 00 00', tg: '@lume_support', ship: 25000 };
 let archivedOrders = [];  // arxivlangan (o'chirilgan) buyurtmalar — lume_orders_archive
 let promos = [];          // chegirma bo'limlari — lume_promos
+let commissions = [];     // pul o'tkazma komissiyalari — lume_commissions [{id,name,pct}]
+let monthlyExpense = 0;   // oylik harajatlar (ijara, ish haqi va h.k.) — lume_expenses (son)
+let users = [];           // ro'yxatdan o'tgan foydalanuvchilar — lume_users [{id,name,phone,addr,ts}]
 let chatMsgs = [];
 let editImg = null, editKey = 'found';
+let editImgs = [];            // mahsulot rasmlari (10 tagacha). editImg = editImgs[0] (asosiy/karta rasmi)
+const MAX_PROD_IMGS = 10;
 let editFit = 'contain', editZoom = 1, editPosX = 50, editPosY = 50;
 let editImgR = null, editFitR = 'contain', editZoomR = 1, editPosXR = 50, editPosYR = 50;
 function editObj() { return { img: editImg, k: editKey, fit: editFit, zoom: editZoom, pos: editPosX + '% ' + editPosY + '%' }; }
@@ -88,11 +93,13 @@ function toast(m, kind) {
 /* ===== ikonalar ===== */
 const ICONS = {
   dash: '<svg fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="9" rx="2"/><rect x="14" y="3" width="7" height="5" rx="2"/><rect x="14" y="12" width="7" height="9" rx="2"/><rect x="3" y="16" width="7" height="5" rx="2"/></svg>',
+  stats: '<svg fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M4 20V4M4 20h16"/><rect x="7.5" y="12" width="3" height="5" rx="1"/><rect x="12.5" y="8.5" width="3" height="8.5" rx="1"/><rect x="17.5" y="6" width="3" height="11" rx="1"/></svg>',
   prods: '<svg fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M20 7L12 3 4 7m16 0l-8 4m8-4v10l-8 4m0-14L4 7m8 4v10M4 7v10l8 4"/></svg>',
   cats: '<svg fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><rect x="3.5" y="3.5" width="7" height="7" rx="2"/><rect x="13.5" y="3.5" width="7" height="7" rx="2"/><rect x="3.5" y="13.5" width="7" height="7" rx="2"/><rect x="13.5" y="13.5" width="7" height="7" rx="2"/></svg>',
   banner: '<svg fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2.5"/><circle cx="8.5" cy="10" r="1.6"/><path stroke-linecap="round" stroke-linejoin="round" d="M4 16l4.5-4 3 2.5L15 11l5 5"/></svg>',
   orders: '<svg fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><rect x="4.5" y="3.5" width="15" height="17" rx="3"/><path stroke-linecap="round" d="M8.8 8.6h6.4M8.8 12h6.4M8.8 15.4h3.6"/></svg>',
   chat: '<svg fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M8 10.5h8M8 14h5M21 12a8 8 0 01-11.5 7.2L3 21l1.8-6.5A8 8 0 1121 12z"/></svg>',
+  users: '<svg fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M17 20v-1.5a3.5 3.5 0 00-3.5-3.5h-6A3.5 3.5 0 004 18.5V20"/><circle cx="10.5" cy="8" r="3.3"/><path stroke-linecap="round" stroke-linejoin="round" d="M20 20v-1.3a3 3 0 00-2.3-2.9M16 5.2a3 3 0 010 5.6"/></svg>',
   qr: '<svg fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><rect x="3.5" y="3.5" width="7" height="7" rx="1.5"/><rect x="13.5" y="3.5" width="7" height="7" rx="1.5"/><rect x="3.5" y="13.5" width="7" height="7" rx="1.5"/><path stroke-linecap="round" d="M14 14h3M20 14v3M17 17v3.5M20.5 20.5H20M14 20.5h.5"/></svg>',
   settings: '<svg fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path stroke-linecap="round" stroke-linejoin="round" d="M19.4 15a1.7 1.7 0 00.3 1.9l.1.1a2 2 0 11-2.8 2.8l-.1-.1a1.7 1.7 0 00-2.9 1.2 2 2 0 11-4 0 1.7 1.7 0 00-2.9-1.2l-.1.1a2 2 0 11-2.8-2.8l.1-.1A1.7 1.7 0 004.6 15a1.7 1.7 0 00-1.5-1H3a2 2 0 110-4h.1A1.7 1.7 0 004.6 9a1.7 1.7 0 00-.3-1.9l-.1-.1a2 2 0 112.8-2.8l.1.1A1.7 1.7 0 0010 3.6 1.7 1.7 0 0011 2.1V2a2 2 0 114 0v.1A1.7 1.7 0 0016 3.6a1.7 1.7 0 001.9-.3l.1-.1a2 2 0 112.8 2.8l-.1.1a1.7 1.7 0 00-.3 1.9 1.7 1.7 0 001.5 1H22a2 2 0 110 4h-.1a1.7 1.7 0 00-1.5 1z"/></svg>',
   admins: '<svg fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M16 20v-1.5a3.5 3.5 0 00-3.5-3.5h-5A3.5 3.5 0 004 18.5V20"/><circle cx="10" cy="8" r="3.2"/><path stroke-linecap="round" stroke-linejoin="round" d="M19 20v-1.2a3 3 0 00-2.2-2.9M15.5 5.2a3 3 0 010 5.6"/></svg>',
@@ -114,8 +121,20 @@ const ICONS = {
 };
 
 /* ===== ADMINLAR / AUTH ===== */
-// Bosh admin — kod ichida qat'iy. O'chirib bo'lmaydi, barcha menyularni ko'radi.
+// Bosh admin — boshlang'ich (default) qiymatlar. O'chirib bo'lmaydi, barcha menyularni ko'radi.
+// Login/parol/ism serverdagi lume_super kaliti orqali o'zgartirilishi mumkin.
 const SUPER = { id: 'super', login: 'tiro', pass: 'tiro00', name: 'Bosh admin', role: 'super' };
+let superCfg = {};      // serverdagi bosh admin sozlamalari (lume_super): {login,pass,name}
+// Amaldagi (effektiv) bosh admin — default ustiga serverdagi o'zgarishlar qo'yiladi.
+function superAcc() {
+  return {
+    id: 'super',
+    role: 'super',
+    login: (superCfg && superCfg.login) || SUPER.login,
+    pass: (superCfg && superCfg.pass) || SUPER.pass,
+    name: (superCfg && superCfg.name) || SUPER.name,
+  };
+}
 let admins = [];        // qo'shimcha adminlar (lume_admins)
 let currentAdmin = null; // hozir kirgan admin
 
@@ -123,18 +142,20 @@ let currentAdmin = null; // hozir kirgan admin
 // [kalit, nom, tavsif] — 'admins' faqat bosh adminga ko'rinadi (ruxsatlar ro'yxatida chiqmaydi).
 const NAV = [
   ['dash', 'Boshqaruv', 'Do\'kon holati bir qarashda'],
+  ['stats', 'Statistika', 'Sotuv va foyda tahlili'],
   ['prods', 'Mahsulotlar', 'Katalogni boshqaring'],
   ['cats', 'Toifalar', 'Kategoriyalarni boshqaring'],
   ['banner', 'Baner', 'Bosh sahifa banerlari'],
   ['orders', 'Buyurtmalar', 'Kelgan buyurtmalar'],
   ['arxiv', 'Arxiv', 'O\'chirilgan buyurtmalar'],
   ['chat', 'Habarlar', 'Mijozlar bilan xabarlashuv'],
+  ['users', 'Userlar', 'Ro\'yxatdan o\'tgan foydalanuvchilar'],
   ['bot', 'Telegram bot', 'Buyurtmalarni kanalga ulash'],
   ['settings', 'Sozlamalar', 'Do\'kon ma\'lumotlari'],
   ['admins', 'Adminlar', 'Adminlarni boshqarish']
 ];
 // Yangi admin uchun belgilanadigan menyular (admins bundan tashqari — faqat bosh admin).
-const PERM_KEYS = ['dash', 'prods', 'cats', 'banner', 'orders', 'arxiv', 'chat', 'bot', 'settings'];
+const PERM_KEYS = ['dash', 'stats', 'prods', 'cats', 'banner', 'orders', 'arxiv', 'chat', 'users', 'bot', 'settings'];
 // Mobil tab-barda ko'rinishi mumkin bo'lgan bo'limlar (ruxsatga qarab filtr qilinadi).
 const TAB_KEYS = ['dash', 'prods', 'orders', 'chat', 'settings'];
 
@@ -176,13 +197,16 @@ function nav(s) {
   const meta = NAV.find(n => n[0] === s) || ['', 'Boshqaruv paneli'];
   $('pageTitle').textContent = meta[1];
   if ($('sidebar')) $('sidebar').classList.remove('open');
+  if ($('sidebarScrim')) $('sidebarScrim').classList.remove('show');
   if (s === 'dash') drawDash();
+  if (s === 'stats') drawStats();
   if (s === 'prods') drawProds();
   if (s === 'cats') drawCats();
   if (s === 'banner') drawBanners();
   if (s === 'orders') drawOrders();
   if (s === 'arxiv') drawArxiv();
   if (s === 'chat') drawChat();
+  if (s === 'users') drawUsers();
   if (s === 'bot') drawBot();
   if (s === 'settings') drawSettings();
   if (s === 'admins') drawAdmins();
@@ -254,7 +278,28 @@ function delBanner(i) {
 
 /* ===== CHEGIRMA BO'LIMLARI ===== */
 let _promoSel = new Set();
-let _promoStyle = 'plain';
+let _promoStyle = 'white';
+// Baner fon ranglari (ilovadagi kalitlar bilan bir xil). 'white' = oddiy (rangsiz).
+const PROMO_COLORS = [
+  ['white', 'Oq (oddiy)', '#ffffff'],
+  ['pink', 'Pushti', '#e81e8c'],
+  ['purple', 'Binafsha', '#8b3dff'],
+  ['blue', 'Ko\'k', '#2563eb'],
+  ['green', 'Yashil', '#16a34a'],
+  ['orange', 'To\'q sariq', '#f97316'],
+  ['red', 'Qizil', '#ef4444'],
+  ['teal', 'Moviy', '#0d9488'],
+  ['gold', 'Oltin', '#f59e0b'],
+];
+// Eski 'plain' -> 'white'; noma'lum -> 'white'.
+function promoStyleKey(st) {
+  if (st === 'plain' || !st) return 'white';
+  return PROMO_COLORS.some(c => c[0] === st) ? st : 'white';
+}
+function promoColorInfo(st) {
+  const k = promoStyleKey(st);
+  return PROMO_COLORS.find(c => c[0] === k) || PROMO_COLORS[0];
+}
 function drawPromos() {
   const el = $('promoList'); if (!el) return;
   const pc = $('promoCount'); if (pc) pc.textContent = promos.length;
@@ -267,8 +312,8 @@ function drawPromos() {
       <div style="flex:1;min-width:0">
         <b style="font-size:14px">${esc(s.title) || '—'}</b>
         <div style="font-size:12px;margin-top:4px;display:flex;align-items:center;gap:6px">
-          <span class="pill ${s.style === 'pink' ? 'cancel' : 'done'}">${s.style === 'pink' ? 'Pushti' : 'Oddiy'}</span>
-          <span class="muted">${(s.items || []).length} ta mahsulot</span>
+          <span style="display:inline-flex;align-items:center;gap:5px"><span style="width:13px;height:13px;border-radius:50%;background:${promoColorInfo(s.style)[2]};border:1px solid var(--border-2);display:inline-block"></span>${promoColorInfo(s.style)[1]}</span>
+          <span class="muted">· ${(s.items || []).length} ta mahsulot</span>
         </div>
       </div>
       <button class="iact" onclick="openPromo('${s.id}')" title="Tahrir" aria-label="Tahrir">${ICONS.edit}</button>
@@ -279,15 +324,16 @@ function drawPromos() {
 function openPromo(id) {
   const s = id ? promos.find(x => x.id === id) : null;
   _promoSel = new Set(s ? (s.items || []) : []);
-  _promoStyle = s ? (s.style || 'plain') : 'plain';
+  _promoStyle = s ? promoStyleKey(s.style) : 'white';
   const body = `
     <div class="field"><label>Sarlavha *</label>
       <input class="input" id="pr-title" value="${esc(s ? s.title : '')}" placeholder="Masalan: Geltek -25% yoki Xitlar"></div>
-    <div class="field" style="margin-top:12px"><label>Uslub</label>
-      <div class="fitpills" id="pr-style">
-        <button type="button" data-st="plain" class="${_promoStyle === 'plain' ? 'on' : ''}" onclick="setPromoStyle('plain')">Oddiy</button>
-        <button type="button" data-st="pink" class="${_promoStyle === 'pink' ? 'on' : ''}" onclick="setPromoStyle('pink')">Pushti (rangli fon)</button>
+    <div class="field" style="margin-top:12px"><label>Baner fon rangi</label>
+      <div class="promo-swatches" id="pr-style">
+        ${PROMO_COLORS.map(([k, label, col]) => `
+          <button type="button" class="promo-swatch ${_promoStyle === k ? 'on' : ''}" data-st="${k}" title="${label}" onclick="setPromoStyle('${k}')" style="--sw:${col}"></button>`).join('')}
       </div>
+      <p class="bot-hint" id="pr-style-lbl">${promoColorInfo(_promoStyle)[1]}${_promoStyle === 'white' ? ' — rangli fon yo\'q' : ' — kartalar shaffof (frosted) bo\'ladi'}</p>
     </div>
     <div class="cat-sec-t" style="margin-top:16px">Mahsulotlar (<span id="pr-cnt">${_promoSel.size}</span>)</div>
     <div class="promo-picker" id="pr-list">
@@ -297,7 +343,7 @@ function openPromo(id) {
           <div class="promo-thumb">${pic(p)}</div>
           <div style="flex:1;min-width:0">
             <b style="font-size:13px;display:block">${esc(p.n)}</b>
-            <small class="muted">${som(p.p)}${p.old ? ` · <span style="color:var(--red)">-${Math.round((1 - p.p / p.old) * 100)}%</span>` : ''}</small>
+            <small class="muted">${som(p.p)}${(p.old > p.p) ? ` · <span style="color:var(--red)">-${Math.round((1 - p.p / p.old) * 100)}%</span>` : ''}</small>
           </div>
         </div>`).join('') : '<div class="muted" style="padding:10px 0">Avval mahsulot qo\'shing</div>'}
     </div>`;
@@ -309,6 +355,8 @@ function openPromo(id) {
 function setPromoStyle(st) {
   _promoStyle = st;
   document.querySelectorAll('#pr-style button').forEach(b => b.classList.toggle('on', b.dataset.st === st));
+  const lbl = $('pr-style-lbl');
+  if (lbl) lbl.textContent = promoColorInfo(st)[1] + (st === 'white' ? ' — rangli fon yo\'q' : ' — kartalar shaffof (frosted) bo\'ladi');
 }
 function togglePromoProd(id) {
   if (_promoSel.has(id)) _promoSel.delete(id); else _promoSel.add(id);
@@ -418,6 +466,336 @@ function drawDash() {
   const ob = $('navOrdBadge'); if (ob) { ob.style.display = pending ? '' : 'none'; ob.textContent = pending; }
 }
 
+/* ===== STATISTIKA ===== */
+// Davr chiplari — bucket granularligini ham, KPI oynasini ham belgilaydi.
+let statsPeriod = 'day';   // day | week | month | year
+const STATS_CFG = {
+  day: { count: 7, gran: 'day', label: "So'nggi 7 kun" },
+  week: { count: 8, gran: 'week', label: "So'nggi 8 hafta" },
+  month: { count: 6, gran: 'month', label: "So'nggi 6 oy" },
+  year: { count: 12, gran: 'month', label: "So'nggi 12 oy" }
+};
+const MON_SHORT = ['Yan', 'Fev', 'Mar', 'Apr', 'May', 'Iyn', 'Iyl', 'Avg', 'Sen', 'Okt', 'Noy', 'Dek'];
+
+// Hisobga olinadigan buyurtmalar — bekor qilinmaganlar (dashboard bilan bir xil mantiq).
+function saleOrders() { return orders.filter(o => o && o.status !== 'cancel' && o.ts); }
+
+// Qisqa son formati (chart yorliqlari uchun): 1 500 000 -> 1.5M
+function shortNum(n) {
+  n = +n || 0;
+  if (n >= 1e9) return (n / 1e9).toFixed(1).replace(/\.0$/, '') + 'B';
+  if (n >= 1e6) return (n / 1e6).toFixed(1).replace(/\.0$/, '') + 'M';
+  if (n >= 1e3) return Math.round(n / 1e3) + 'k';
+  return String(Math.round(n));
+}
+
+// Umumiy komissiya foizi (barcha komissiyalar yig'indisi).
+function totalPct() { return commissions.reduce((s, c) => s + (+c.pct || 0), 0); }
+
+// Tanlangan davr uchun vaqt bo'laklari (chartda ustunlar, KPI uchun oyna).
+function statsBuckets() {
+  const cfg = STATS_CFG[statsPeriod];
+  const now = new Date();
+  const buckets = [];
+  if (cfg.gran === 'day') {
+    for (let i = cfg.count - 1; i >= 0; i--) {
+      const d = new Date(now); d.setHours(0, 0, 0, 0); d.setDate(d.getDate() - i);
+      const start = d.getTime();
+      buckets.push({ start, end: start + 864e5, label: d.getDate() + '/' + (d.getMonth() + 1), rev: 0, cnt: 0 });
+    }
+  } else if (cfg.gran === 'week') {
+    for (let i = cfg.count - 1; i >= 0; i--) {
+      const d = new Date(now); d.setHours(0, 0, 0, 0); d.setDate(d.getDate() - i * 7);
+      const end = d.getTime() + 864e5;
+      const start = end - 7 * 864e5;
+      const sd = new Date(start);
+      buckets.push({ start, end, label: sd.getDate() + '/' + (sd.getMonth() + 1), rev: 0, cnt: 0 });
+    }
+  } else { // month
+    for (let i = cfg.count - 1; i >= 0; i--) {
+      const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+      const start = d.getTime();
+      const end = new Date(now.getFullYear(), now.getMonth() - i + 1, 1).getTime();
+      buckets.push({ start, end, label: MON_SHORT[d.getMonth()], rev: 0, cnt: 0 });
+    }
+  }
+  for (const o of saleOrders()) {
+    const t = +o.ts;
+    for (const b of buckets) {
+      if (t >= b.start && t < b.end) { b.rev += (+o.total || 0); b.cnt++; break; }
+    }
+  }
+  return buckets;
+}
+
+// Ustunni yumaloq tepali qilib chizadigan yo'l (path).
+function barPath(x, y, w, h, r) {
+  const base = y + h;
+  r = Math.max(0, Math.min(r, w / 2, h));
+  return `M${x} ${base} L${x} ${y + r} Q${x} ${y} ${x + r} ${y} `
+    + `L${x + w - r} ${y} Q${x + w} ${y} ${x + w} ${y + r} L${x + w} ${base} Z`;
+}
+
+// Chiroyli yaxlit maksimum (o'q shkalasi uchun): 1..2..2.5..5..10 * 10^k
+function niceCeil(v) {
+  v = +v || 0;
+  if (v <= 0) return 1;
+  const mag = Math.pow(10, Math.floor(Math.log10(v)));
+  const norm = v / mag;
+  const step = norm <= 1 ? 1 : norm <= 2 ? 2 : norm <= 2.5 ? 2.5 : norm <= 5 ? 5 : 10;
+  return step * mag;
+}
+
+// Ustunli diagramma (mustaqil SVG — tashqi kutubxonasiz).
+// Zamonaviy: yumshoq to'r chiziqlari, yumaloq tepali gradient ustunlar,
+// joriy davr ustuni ajratilgan, o'q/qiymat yorliqlari va silliq animatsiya.
+function statsChartSVG(buckets) {
+  const n = buckets.length;
+  const max = Math.max(1, ...buckets.map(b => b.rev));
+  const niceMax = niceCeil(max);
+  const slot = 46, padL = 36, padR = 12, padTop = 18, chartH = 150, padBot = 24;
+  const bw = Math.min(16, slot - 26); // nozik ustunlar
+  const W = padL + padR + n * slot, H = padTop + chartH + padBot;
+  const baseY = padTop + chartH;
+
+  // To'r chiziqlari + Y o'q yorliqlari
+  const LEVELS = 4;
+  let grid = '';
+  for (let i = 0; i <= LEVELS; i++) {
+    const gy = padTop + chartH * (i / LEVELS);
+    const val = niceMax * (1 - i / LEVELS);
+    grid += `<line class="bc-grid${i === LEVELS ? ' base' : ''}" x1="${padL}" y1="${gy.toFixed(1)}" x2="${W - padR}" y2="${gy.toFixed(1)}"/>`;
+    grid += `<text class="bc-ylab" x="${padL - 9}" y="${(gy + 3.5).toFixed(1)}" text-anchor="end">${shortNum(val)}</text>`;
+  }
+
+  let bars = '';
+  buckets.forEach((b, i) => {
+    const cx = padL + i * slot + slot / 2;
+    const x = cx - bw / 2;
+    const h = Math.max(3, chartH * (b.rev / niceMax));
+    const y = baseY - h;
+    const isCur = i === n - 1; // oxirgi (joriy) davr — ajratib ko'rsatamiz
+    bars += `<g class="bc-col" style="--d:${(i * 0.05).toFixed(2)}s">
+      <title>${esc(b.label)}: ${som(b.rev)} — ${b.cnt} buyurtma</title>
+      <path class="bc-bar${isCur ? ' is-cur' : ''}" d="${barPath(x, y, bw, h, 7)}" fill="url(#${isCur ? 'bcg2' : 'bcg'})"/>
+      ${b.rev ? `<text class="bc-val" x="${cx}" y="${(y - 8).toFixed(1)}" text-anchor="middle">${shortNum(b.rev)}</text>` : ''}
+      <text class="bc-xlab" x="${cx}" y="${H - 8}" text-anchor="middle">${esc(b.label)}</text>
+    </g>`;
+  });
+
+  return `<div class="chart-wrap"><svg class="bar-chart" viewBox="0 0 ${W} ${H}" preserveAspectRatio="xMidYMid meet" role="img" aria-label="Tushum dinamikasi">
+    <defs>
+      <linearGradient id="bcg" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0" stop-color="var(--green)"/><stop offset="1" stop-color="var(--green-700)"/>
+      </linearGradient>
+      <linearGradient id="bcg2" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0" stop-color="#5eead4"/><stop offset="1" stop-color="var(--green-600)"/>
+      </linearGradient>
+    </defs>
+    ${grid}${bars}
+  </svg></div>`;
+}
+
+// Berilgan oynada mahsulot bo'yicha sotuv (nomi -> {name, qty, rev}).
+function productSales(rangeStart, rangeEnd) {
+  const map = new Map();
+  for (const o of saleOrders()) {
+    const t = +o.ts;
+    if (t < rangeStart || t >= rangeEnd) continue;
+    for (const it of (o.items || [])) {
+      const key = String(it && it.n != null ? it.n : '').trim() || '—';
+      const m = map.get(key) || { name: key, qty: 0, rev: 0 };
+      m.qty += (+it.q || 0);
+      m.rev += (+it.p || 0) * (+it.q || 0);
+      map.set(key, m);
+    }
+  }
+  return map;
+}
+
+function prodRankRow(rank, name, qty, rev, ratio, low) {
+  const p = products.find(x => String(x.n || '').trim() === String(name).trim());
+  const emo = p ? pic(p) : '<span style="font-size:20px">🛍️</span>';
+  const w = low ? Math.max(6, Math.round(ratio * 100)) : Math.round(ratio * 100);
+  return `<div class="pr-row">
+    <div class="pr-rank">${rank}</div>
+    <div class="pr-emo">${emo}</div>
+    <div class="pr-main">
+      <div class="pr-name">${esc(name)}</div>
+      <div class="pr-bar ${low ? 'low' : ''}"><i style="width:${w}%"></i></div>
+    </div>
+    <div class="pr-qty">${qty} <small>dona</small>${rev ? `<br><small style="font-weight:600">${som(rev)}</small>` : ''}</div>
+  </div>`;
+}
+
+const STATS_EMPTY = (emo, t) => `<div class="empty" style="padding:30px 16px"><div class="e-emo">${emo}</div><h4>${t}</h4></div>`;
+
+function drawStats() {
+  const cfg = STATS_CFG[statsPeriod];
+  const buckets = statsBuckets();
+  const revenue = buckets.reduce((s, b) => s + b.rev, 0);
+  const ordCnt = buckets.reduce((s, b) => s + b.cnt, 0);
+  const pct = totalPct();
+  const commAmt = revenue * pct / 100;
+
+  // Davr oynasi — tan narxi va oylik harajatlarni hisoblash uchun.
+  const rStart = buckets.length ? buckets[0].start : 0;
+  const rEnd = buckets.length ? buckets[buckets.length - 1].end : Date.now();
+  const costTotal = periodCost(rStart, rEnd);                 // sotilgan mahsulotlar tan narxi
+  const periodDays = Math.max(1, Math.round((rEnd - rStart) / 864e5));
+  const expenses = Math.round(monthlyExpense * periodDays / 30); // oylik harajat — davr ulushi
+  const realProfit = revenue - commAmt - costTotal - expenses;   // REAL daromad
+
+  // Sarlavha + davr chiplari
+  const sub = $('statsSub'); if (sub) sub.textContent = cfg.label + ' bo\'yicha';
+  $('statsFilters').innerHTML =
+    `<div class="ord-filter-grp"><span class="ord-filter-lbl">Davr</span><div class="chips">${[['day', 'Kunlik'], ['week', 'Haftalik'], ['month', 'Oylik'], ['year', 'Yillik']]
+      .map(([k, l]) => `<button class="chip ${statsPeriod === k ? 'is-active' : ''}" onclick="setStatsPeriod('${k}')">${l}</button>`).join('')}</div></div>`;
+
+  // KPI kartalari
+  const cards = [
+    { bg: 'rgba(139,92,246,.15)', emo: '💰', v: num(revenue), l: "Tushum, so'm" },
+    { bg: 'rgba(59,130,246,.15)', emo: '🧾', v: ordCnt, l: 'Buyurtma' },
+    { bg: 'rgba(245,158,11,.15)', emo: '📉', v: num(Math.round(commAmt)), l: `Komissiya (${(+pct.toFixed(2))}%)` },
+    { bg: 'rgba(34,197,94,.15)', emo: '💵', v: num(Math.round(realProfit)), l: "Real daromad, so'm" }
+  ];
+  $('statsKpi').innerHTML = cards.map(c => `
+    <div class="kpi">
+      <div class="kic" style="background:${c.bg}">${c.emo}</div>
+      <div class="klabel">${c.l}</div>
+      <div class="kval">${c.v}</div>
+    </div>`).join('');
+
+  // Chart — TUSHUM (mahsulot sotilgan narxlari). Diagramma foyda emas, tushumni ko'rsatadi.
+  const ct = $('statsChartTitle'); if (ct) ct.textContent = 'Tushum dinamikasi';
+  const cs = $('statsChartSub'); if (cs) cs.textContent = cfg.label + ' · sotuv summasi';
+  $('statsChart').innerHTML = ordCnt ? statsChartSVG(buckets) : STATS_EMPTY('📊', 'Bu davrda ma\'lumot yo\'q');
+
+  // Real daromad ramkasi + oylik harajat kiritish
+  drawProfit(revenue, costTotal, commAmt, expenses, realProfit, periodDays);
+
+  // Mahsulot tahlili (shu oyna ichida)
+  const map = productSales(rStart, rEnd);
+  const sold = [...map.values()].filter(m => m.name !== '—');
+  const best = sold.slice().sort((a, b) => b.qty - a.qty).slice(0, 6);
+  const maxQty = best.length ? Math.max(1, best[0].qty) : 1;
+  $('statsBest').innerHTML = best.length
+    ? best.map((m, i) => prodRankRow(i + 1, m.name, m.qty, m.rev, m.qty / maxQty, false)).join('')
+    : STATS_EMPTY('🏆', 'Bu davrda sotuv yo\'q');
+
+  // Yaxshi sotilmagan: katalogdagi mahsulotlarni sotuvga bog'lab, eng pastlari (0 ham).
+  let worst;
+  if (products.length) {
+    worst = products.map(p => {
+      const m = map.get(String(p.n || '').trim());
+      return { name: p.n || '—', qty: m ? m.qty : 0, rev: m ? m.rev : 0 };
+    }).sort((a, b) => a.qty - b.qty).slice(0, 6);
+  } else {
+    worst = sold.slice().sort((a, b) => a.qty - b.qty).slice(0, 6);
+  }
+  $('statsWorst').innerHTML = worst.length
+    ? worst.map((m, i) => prodRankRow(i + 1, m.name, m.qty, m.rev, maxQty ? m.qty / maxQty : 0, true)).join('')
+    : STATS_EMPTY('📉', 'Mahsulot yo\'q');
+
+  // Komissiya boshqaruvi
+  drawCommission(revenue);
+}
+
+function drawCommission(revenue) {
+  const pct = totalPct();
+  const commAmt = revenue * pct / 100, net = revenue - commAmt;
+  const list = commissions.length
+    ? commissions.map(c => `
+      <div class="comm-item">
+        <div class="ci-name">${esc(c.name)}</div>
+        <div class="ci-pct">${(+(+c.pct).toFixed(2))}%</div>
+        <button class="iact danger" onclick="delCommission(${c.id})" aria-label="O'chirish">${ICONS.del}</button>
+      </div>`).join('')
+    : `<div class="muted" style="font-size:13px;padding:4px 2px">Hozircha komissiya yo'q. Pastdan nom va foiz kiriting.</div>`;
+  $('statsCommission').innerHTML = `
+    <div class="card-head" style="padding:0 0 14px;margin-bottom:14px">
+      <div><h3>Komissiyalar</h3><div class="sub">Pul o'tkazmalaridan ushlanadigan foizlar — real foyda shu asosda hisoblanadi</div></div>
+    </div>
+    <div class="comm-list">${list}</div>
+    <div class="comm-add">
+      <div class="field" style="flex:1;min-width:150px"><label>Komissiya nomi</label><input class="input" id="commName" placeholder="Masalan: Click / Payme" onkeydown="if(event.key==='Enter')addCommission()"></div>
+      <div class="field" style="width:120px"><label>Foiz (%)</label><input class="input" id="commPct" inputmode="decimal" placeholder="1.5" onkeydown="if(event.key==='Enter')addCommission()"></div>
+      <button class="btn btn--primary" onclick="addCommission()" style="height:44px">Qo'shish</button>
+    </div>
+    <div class="comm-total">
+      Umumiy komissiya: <b style="color:var(--amber)">${(+pct.toFixed(2))}%</b> — davr tushumidan <b style="color:var(--amber)">${som(Math.round(commAmt))}</b> ushlanadi.
+    </div>`;
+}
+
+// Sotilgan mahsulotlarning tan narxi (davr oynasida) — sof foyda uchun.
+function periodCost(rStart, rEnd) {
+  let cost = 0;
+  for (const o of saleOrders()) {
+    const t = +o.ts; if (t < rStart || t >= rEnd) continue;
+    for (const it of (o.items || [])) {
+      const p = products.find(x => String(x.n || '').trim() === String(it && it.n || '').trim());
+      const c = p ? (+p.cost || 0) : 0;
+      cost += c * (+it.q || 0);
+    }
+  }
+  return cost;
+}
+
+// Real daromad ramkasi: tushum − tan narxi − komissiya − oylik harajat = real daromad.
+function drawProfit(revenue, costTotal, commAmt, expenses, realProfit, periodDays) {
+  const el = $('statsProfit'); if (!el) return;
+  const row = (label, val, neg, strong) => `
+    <div class="pf-row${strong ? ' pf-total' : ''}">
+      <span>${label}</span>
+      <b style="color:${strong ? (realProfit >= 0 ? 'var(--green)' : 'var(--red)') : (neg ? 'var(--red)' : 'var(--text)')}">${neg && val ? '− ' : ''}${som(Math.round(val))}</b>
+    </div>`;
+  el.innerHTML = `
+    <div class="card-head" style="padding:0 0 14px;margin-bottom:14px">
+      <div><h3>Real daromad</h3><div class="sub">Komissiya, mahsulot tan narxi va oylik harajatlar ayirilgan sof daromad</div></div>
+    </div>
+    <div class="pf-list">
+      ${row('Tushum (sotuvlar)', revenue, false, false)}
+      ${row('Mahsulot tan narxi', costTotal, true, false)}
+      ${row('Komissiya', commAmt, true, false)}
+      ${row(`Oylik harajatlar (${periodDays} kun ulushi)`, expenses, true, false)}
+      ${row('Real daromad', realProfit, false, true)}
+    </div>
+    <div class="comm-add" style="margin-top:16px">
+      <div class="field" style="flex:1;min-width:180px"><label>Oylik harajatlar (so'm)</label>
+        <input class="input" id="expInput" inputmode="numeric" placeholder="Masalan: 3000000" value="${monthlyExpense || ''}" onkeydown="if(event.key==='Enter')saveExpenses()"></div>
+      <button class="btn btn--primary" onclick="saveExpenses()" style="height:44px">Saqlash</button>
+    </div>
+    <div class="muted" style="font-size:12px;margin-top:10px;line-height:1.5">Oylik harajatlar (ijara, ish haqi, reklama va h.k.) bir marta kiritiladi va serverda saqlanadi. Tanlangan davr uchun kunlar ulushi bo'yicha hisoblanadi.</div>`;
+}
+
+function saveExpenses() {
+  const v = +String($('expInput').value || '').replace(/\D/g, '') || 0;
+  monthlyExpense = v;
+  cset('lume_expenses', v);
+  drawStats();
+  toast('Oylik harajatlar saqlandi');
+}
+
+function setStatsPeriod(p) { if (STATS_CFG[p]) { statsPeriod = p; drawStats(); } }
+
+function addCommission() {
+  const name = ($('commName').value || '').trim();
+  const pct = +String($('commPct').value || '').replace(',', '.').replace(/[^\d.]/g, '');
+  if (!name) { toast('Komissiya nomini kiriting', 'err'); return; }
+  if (!(pct > 0)) { toast("Foizni to'g'ri kiriting", 'err'); return; }
+  if (pct >= 100) { toast('Foiz 100 dan kichik bo\'lishi kerak', 'err'); return; }
+  commissions.push({ id: Date.now(), name, pct });
+  cset('lume_commissions', commissions);
+  drawStats();
+  toast('Komissiya qo\'shildi');
+}
+function delCommission(id) {
+  commissions = commissions.filter(c => c.id !== id);
+  cset('lume_commissions', commissions);
+  drawStats();
+  toast('O\'chirildi');
+}
+
 /* ===== PRODUCTS ===== */
 function drawProds() {
   $('prodCount').textContent = products.length;
@@ -427,7 +805,7 @@ function drawProds() {
       <td><div class="cell-prod"><div class="emo">${pic(p)}</div><div><b>${esc(p.n)}</b><br><small class="muted">${esc(p.br || '')}</small></div></div></td>
       <td><span class="pill">${esc(catName(p.c)) || '—'}</span></td>
       <td><span class="num">${som(p.p)}</span></td>
-      <td>${p.old ? `<span class="pill cancel">-${Math.round((1 - p.p / p.old) * 100)}%</span>` : '<span class="muted">—</span>'}</td>
+      <td>${(p.old > p.p) ? `<span class="pill cancel">-${Math.round((1 - p.p / p.old) * 100)}%</span>` : '<span class="muted">—</span>'}</td>
       <td><div class="act-btns" style="justify-content:flex-end">
         <button class="iact" onclick="openProd(${p.id})" aria-label="Tahrir">${ICONS.edit}</button>
         <button class="iact danger" onclick="delProd(${p.id})" aria-label="O'chirish">${ICONS.del}</button>
@@ -437,7 +815,9 @@ function drawProds() {
 }
 function openProd(id) {
   const p = id ? products.find(x => x.id === id) : null;
-  editImg = p ? p.img || null : null;
+  // Rasmlar: yangi imgs massivi bo'lsa undan, aks holda eski yagona img'dan.
+  editImgs = p ? (Array.isArray(p.imgs) && p.imgs.length ? p.imgs.slice(0, MAX_PROD_IMGS) : (p.img ? [p.img] : [])) : [];
+  editImg = editImgs[0] || null;
   editKey = p ? (p.k || 'found') : 'found';
   editFit = p && p.fit === 'cover' ? 'cover' : 'contain';
   editZoom = p && p.zoom ? +p.zoom : 1;
@@ -446,18 +826,18 @@ function openProd(id) {
   const body = `
     <p class="muted" style="font-size:12.5px;margin-bottom:16px">Do'kon katalogida ko'rinadi.</p>
     <div class="img-pick">
-      <div class="img-prev" id="img-prev">${pic(editObj())}<span class="pv-tag">Karta ko'rinishi</span></div>
+      <div class="img-prev" id="img-prev">${pic(editObj())}<span class="pv-tag">Karta rasmi</span></div>
       <div style="flex:1">
-        <div class="field"><label>Mahsulot rasmi</label>
+        <div class="field"><label>Mahsulot rasmlari (<span id="p-imgs-count">${editImgs.length}</span>/${MAX_PROD_IMGS})</label>
           <div style="display:flex;align-items:center;flex-wrap:wrap;gap:6px">
-            <label class="up-btn">${ICONS.upload}<span>Rasm yuklash</span>
-              <input type="file" accept="image/*" id="p-img" onchange="onImg(event)"></label>
-            <button type="button" class="up-rm" id="up-rm" onclick="removeImg()" style="${editImg ? '' : 'display:none'}">Olib tashlash</button>
+            <label class="up-btn" id="p-img-btn">${ICONS.upload}<span>Rasm qo'shish</span>
+              <input type="file" accept="image/*" id="p-img" multiple onchange="onImg(event)"></label>
           </div>
-          <div class="up-hint">JPG / PNG — istalgan o'lcham (avtomatik siqiladi)</div>
+          <div class="up-hint">Birinchi rasm — karta rasmi. 10 tagacha rasm qo'shishingiz mumkin (avtomatik siqiladi).</div>
         </div>
       </div>
     </div>
+    <div class="p-imgs-strip" id="p-imgs-strip"></div>
     <div class="fit-ctl ${editImg ? '' : 'dim'}" id="fit-ctl">
       <div class="fitpills">
         <button type="button" id="fit-contain" class="${editFit === 'contain' ? 'on' : ''}" onclick="setFit('contain')">Butun rasm</button>
@@ -472,6 +852,7 @@ function openProd(id) {
       <div class="field"><label>Kategoriya</label><select class="input" id="p-c">${categories.length ? categories.map(c => `<option value="${c.id}" ${p && p.c == c.id ? 'selected' : ''}>${esc(c.name)}</option>`).join('') : '<option value="">— toifa yo\'q —</option>'}</select></div>
       <div class="field"><label>Narx (so'm) *</label><input class="input" id="p-p" inputmode="numeric" value="${p ? p.p : ''}" placeholder="250000"></div>
       <div class="field"><label>Eski narx (chegirma)</label><input class="input" id="p-old" inputmode="numeric" value="${p && p.old ? p.old : ''}" placeholder="0 = yo'q"></div>
+      <div class="field"><label>Tan narxi (asil narx)</label><input class="input" id="p-cost" inputmode="numeric" value="${p && p.cost ? p.cost : ''}" placeholder="Sof foyda uchun"></div>
       <div class="field span2"><label>Hajm (vergul bilan)</label><input class="input" id="p-sz" value="${esc(p && p.sz ? p.sz.join(', ') : '')}" placeholder="30ml, 50ml"></div>
       <div class="field span2"><label>Tavsif (o'zbekcha)</label><textarea class="input" id="p-d">${esc(p && p.d ? (p.d.uz || '') : '')}</textarea></div>
     </div>`;
@@ -479,6 +860,19 @@ function openProd(id) {
     <button class="btn btn--ghost" onclick="closeModal()">Bekor</button>
     <button class="btn btn--primary" onclick="saveProd(${p ? p.id : 'null'})">Saqlash</button>`;
   openModal(p ? 'Mahsulotni tahrirlash' : 'Yangi mahsulot', body, foot);
+  renderProdImgs();
+}
+// Rasmlar tasmasini (thumbnails) chizadi — har birida "asosiy qilish" va "o'chirish".
+function renderProdImgs() {
+  const strip = $('p-imgs-strip'); if (!strip) return;
+  strip.innerHTML = editImgs.map((src, i) => `
+    <div class="p-imgs-thumb${i === 0 ? ' is-main' : ''}">
+      <img src="${src}" alt="">
+      ${i === 0 ? '<span class="p-imgs-badge">Asosiy</span>' : `<button type="button" class="p-imgs-star" title="Asosiy qilish" onclick="makeMainImg(${i})">★</button>`}
+      <button type="button" class="p-imgs-del" title="O'chirish" onclick="removeImgAt(${i})">✕</button>
+    </div>`).join('');
+  const cnt = $('p-imgs-count'); if (cnt) cnt.textContent = editImgs.length;
+  const btn = $('p-img-btn'); if (btn) btn.style.display = editImgs.length >= MAX_PROD_IMGS ? 'none' : '';
 }
 function refreshPrev() {
   $('img-prev').innerHTML = pic(editObj()) + '<span class="pv-tag">Karta ko\'rinishi</span>';
@@ -491,32 +885,64 @@ function setFit(v) {
   $('fit-cover').classList.toggle('on', v === 'cover');
   refreshPrev();
 }
-function onImg(e) {
-  const f = e.target.files && e.target.files[0]; if (!f) return;
-  if (!/^image\//.test(f.type)) { toast('Faqat rasm faylini tanlang', 'err'); e.target.value = ''; return }
-  const r = new FileReader();
-  r.onload = () => {
-    const im = new Image();
-    im.onload = () => {
-      const MAX = 900;
-      let { width: w, height: h } = im;
-      if (w > MAX || h > MAX) { const s = Math.min(MAX / w, MAX / h); w = Math.round(w * s); h = Math.round(h * s); }
-      const cv = document.createElement('canvas'); cv.width = w; cv.height = h;
-      const cx = cv.getContext('2d');
-      cx.fillStyle = '#ffffff'; cx.fillRect(0, 0, w, h);
-      cx.drawImage(im, 0, 0, w, h);
-      try { editImg = cv.toDataURL('image/jpeg', 0.82); } catch (err) { editImg = r.result; }
-      refreshPrev();
-      e.target.value = '';
-      toast('Rasm yuklandi');
+// Bitta rasm faylini siqib, data:URL qaytaradi (Promise).
+function compressImage(f) {
+  return new Promise((resolve, reject) => {
+    const r = new FileReader();
+    r.onload = () => {
+      const im = new Image();
+      im.onload = () => {
+        const MAX = 900;
+        let { width: w, height: h } = im;
+        if (w > MAX || h > MAX) { const s = Math.min(MAX / w, MAX / h); w = Math.round(w * s); h = Math.round(h * s); }
+        const cv = document.createElement('canvas'); cv.width = w; cv.height = h;
+        const cx = cv.getContext('2d');
+        cx.fillStyle = '#ffffff'; cx.fillRect(0, 0, w, h);
+        cx.drawImage(im, 0, 0, w, h);
+        try { resolve(cv.toDataURL('image/jpeg', 0.82)); } catch (err) { resolve(r.result); }
+      };
+      im.onerror = () => reject(new Error('image'));
+      im.src = r.result;
     };
-    im.onerror = () => { toast('Rasmni o\'qib bo\'lmadi', 'err'); };
-    im.src = r.result;
-  };
-  r.onerror = () => { toast('Faylni o\'qib bo\'lmadi', 'err'); };
-  r.readAsDataURL(f);
+    r.onerror = () => reject(new Error('file'));
+    r.readAsDataURL(f);
+  });
 }
-function removeImg() { editImg = null; const fi = $('p-img'); if (fi) fi.value = ''; refreshPrev(); }
+// Bir yoki bir nechta rasm tanlanganda — 10 tagacha qo'shadi.
+async function onImg(e) {
+  const files = Array.from(e.target.files || []).filter(f => /^image\//.test(f.type));
+  e.target.value = '';
+  if (!files.length) { toast('Faqat rasm faylini tanlang', 'err'); return; }
+  const room = MAX_PROD_IMGS - editImgs.length;
+  if (room <= 0) { toast(`Ko'pi bilan ${MAX_PROD_IMGS} ta rasm`, 'err'); return; }
+  const take = files.slice(0, room);
+  let added = 0;
+  for (const f of take) {
+    try { editImgs.push(await compressImage(f)); added++; } catch (err) { /* jimgina o'tamiz */ }
+  }
+  editImg = editImgs[0] || null;
+  refreshPrev();
+  renderProdImgs();
+  if (added) toast(added > 1 ? `${added} ta rasm qo'shildi` : 'Rasm qo\'shildi');
+  if (files.length > room) toast(`Faqat ${room} ta rasm qo'shildi (limit ${MAX_PROD_IMGS})`, 'err');
+}
+// Rasmni o'chirish (indeks bo'yicha).
+function removeImgAt(i) {
+  if (i < 0 || i >= editImgs.length) return;
+  editImgs.splice(i, 1);
+  editImg = editImgs[0] || null;
+  refreshPrev();
+  renderProdImgs();
+}
+// Rasmni "asosiy" (birinchi/karta rasmi) qilib oldinga ko'chiradi.
+function makeMainImg(i) {
+  if (i <= 0 || i >= editImgs.length) return;
+  const [im] = editImgs.splice(i, 1);
+  editImgs.unshift(im);
+  editImg = editImgs[0] || null;
+  refreshPrev();
+  renderProdImgs();
+}
 function saveProd(id) {
   const n = $('p-n').value.trim();
   const p = +$('p-p').value.replace(/\D/g, '');
@@ -526,8 +952,11 @@ function saveProd(id) {
     n, br: $('p-br').value.trim(),
     c: +$('p-c').value,
     p, old: +$('p-old').value.replace(/\D/g, '') || 0,
+    cost: +$('p-cost').value.replace(/\D/g, '') || 0,
     sz: $('p-sz').value.split(',').map(s => s.trim()).filter(Boolean),
-    k: editKey, img: editImg || null,
+    k: editKey,
+    imgs: editImgs.slice(0, MAX_PROD_IMGS),
+    img: editImgs[0] || null,  // birinchi rasm — karta rasmi (eski moslik uchun)
     fit: editFit, zoom: editZoom, pos: editPosX + '% ' + editPosY + '%',
     d: { uz: $('p-d').value.trim() }
   };
@@ -798,27 +1227,46 @@ function arxivRow(o) {
     </div></td>
   </tr>`;
 }
-function restoreOrder(id) {
-  const i = archivedOrders.findIndex(x => x.id === id); if (i < 0) return;
+async function restoreOrder(id) {
+  await Cloud.refresh();
+  orders = cget('lume_orders', []) || [];
+  archivedOrders = cget('lume_orders_archive', []) || [];
+  const i = archivedOrders.findIndex(x => x.id === id);
+  if (i < 0) { drawArxiv(); return; }
   const o = archivedOrders.splice(i, 1)[0];
   orders.unshift(o);
   orders.sort((a, b) => (b.ts || 0) - (a.ts || 0));
   cset('lume_orders', orders); cset('lume_orders_archive', archivedOrders);
   drawArxiv(); drawDash(); toast('Buyurtma tiklandi');
 }
-function delArxiv(id) {
+async function delArxiv(id) {
   if (!confirm('Buyurtma butunlay o\'chirilsinmi? Buni tiklab bo\'lmaydi.')) return;
+  await Cloud.refresh();
+  archivedOrders = cget('lume_orders_archive', []) || [];
   archivedOrders = archivedOrders.filter(x => x.id !== id);
   cset('lume_orders_archive', archivedOrders);
   drawArxiv(); toast('Butunlay o\'chirildi');
 }
-function clearArxiv() {
+async function clearArxiv() {
   if (!archivedOrders.length) return;
   if (!confirm('Arxivdagi BARCHA buyurtmalar butunlay o\'chirilsinmi?')) return;
-  archivedOrders = []; cset('lume_orders_archive', archivedOrders);
+  await Cloud.refresh();
+  archivedOrders = [];
+  cset('lume_orders_archive', archivedOrders);
   drawArxiv(); toast('Arxiv tozalandi');
 }
-function setStatus(id, st) { const o = orders.find(x => x.id === id); if (o) { o.status = st; cset('lume_orders', orders); drawOrders(); drawDash(); toast('Holat yangilandi') } }
+async function setStatus(id, st) {
+  // refresh → merge → write: serverdan eng yangi ro'yxatni olamiz (admin ochiq
+  // turганda mijoz qo'shgan yangi buyurtmalar ham), so'ng shu buyurtma holatini
+  // o'zgartirib qayta yozamiz — aks holda yangi buyurtmalar o'chib ketardi.
+  await Cloud.refresh();
+  orders = cget('lume_orders', []) || [];
+  const o = orders.find(x => x.id === id);
+  if (!o) { drawOrders(); return; }
+  o.status = st;
+  cset('lume_orders', orders);
+  drawOrders(); drawDash(); toast('Holat yangilandi');
+}
 
 // To'lov turi yorlig'i (ilova bilan bir xil)
 function payLabel(p) { return ({ card: 'Karta (Uzcard / Humo)', payme: 'Payme', click: 'Click', cash: 'Naqd' })[p] || 'Naqd'; }
@@ -943,21 +1391,58 @@ function downloadReceipt(id) {
   } catch (e) { toast('Chekni yuklab bo\'lmadi', 'err'); }
 }
 // O'chirish endi arxivга ko'chiradi (butunlay yo'q qilmaydi).
-function delOrder(id) {
-  const i = orders.findIndex(x => x.id === id); if (i < 0) return;
+async function delOrder(id) {
+  await Cloud.refresh();
+  orders = cget('lume_orders', []) || [];
+  archivedOrders = cget('lume_orders_archive', []) || [];
+  const i = orders.findIndex(x => x.id === id);
+  if (i < 0) { closeModal(); drawOrders(); return; }
   const o = orders.splice(i, 1)[0];
   archivedOrders.unshift(o);
   cset('lume_orders', orders); cset('lume_orders_archive', archivedOrders);
   closeModal(); drawOrders(); drawDash(); toast('Arxivga ko\'chirildi');
 }
-function clearOrders() {
+async function clearOrders() {
   if (!orders.length) return;
   if (!confirm('Barcha buyurtmalar arxivga ko\'chirilsinmi?')) return;
+  await Cloud.refresh();
+  orders = cget('lume_orders', []) || [];
+  archivedOrders = cget('lume_orders_archive', []) || [];
   archivedOrders = orders.concat(archivedOrders);
   orders = [];
   cset('lume_orders', orders); cset('lume_orders_archive', archivedOrders);
   drawOrders(); drawDash(); toast('Hammasi arxivlandi');
 }
+
+// Buyurtmalarni serverdan qayta yuklaydi (qo'lda tugma va avtomatik interval uchun).
+async function refreshOrders(showToast) {
+  await Cloud.refresh();
+  orders = cget('lume_orders', []) || [];
+  archivedOrders = cget('lume_orders_archive', []) || [];
+  _ordersSig = _ordersSignature(orders);
+  drawOrders(); drawDash();
+  if (showToast) toast('Buyurtmalar yangilandi');
+}
+function _ordersSignature(arr) {
+  return arr.length + ':' + arr.reduce((s, o) => Math.max(s, o.ts || 0), 0)
+    + ':' + arr.map(o => o.status || '').join(',');
+}
+// Buyurtmalar bo'limi ochiq bo'lsa — har 10 soniyada serverdan yangilaymiz.
+// cget faqat keshdan o'qigani uchun avval refresh() qilamiz. Ma'lumot
+// o'zgargandagina qayta chizamiz (_usersSig uslubidagi taqqoslash).
+let _ordersSig = '';
+setInterval(async () => {
+  const sec = $('sec-orders');
+  if (!sec || !sec.classList.contains('is-active')) return;
+  await Cloud.refresh();
+  const arr = cget('lume_orders', []) || [];
+  const sig = _ordersSignature(arr);
+  if (sig === _ordersSig) return;
+  _ordersSig = sig;
+  orders = arr;
+  archivedOrders = cget('lume_orders_archive', []) || [];
+  drawOrders(); drawDash();
+}, 10000);
 
 /* ===== XABARLAR (chat) — ikki ustunli ===== */
 let chatFilter = 'all';   // all | day | week | month | muhim | arxiv
@@ -1048,7 +1533,10 @@ function drawChat() {
     </div>`).join('')
     : `<div class="empty" style="padding:40px 16px"><h4 class="muted">Hali suhbatlar yo'q</h4></div>`;
 
-  const sel = chatConversations().find(c => c.name === chatSelected);
+  let sel = chatConversations().find(c => c.name === chatSelected);
+  // Userlar bo'limidan "Xabar yuborish" bosilganda suhbat hali bo'lmasligi mumkin —
+  // shunda bo'sh suhbat ochamiz (birinchi xabar shu yerdan yoziladi).
+  if (!sel && chatSelected) sel = { name: chatSelected, msgs: [] };
   if (!sel) {
     if (grid) grid.classList.remove('show-conv');
     conv.innerHTML = `<div class="conv-empty">Chapdan suhbatni tanlang yoki bozordan "Sotuvchi bilan xabarlashish" orqali boshlang.</div>`;
@@ -1092,7 +1580,9 @@ function sendAdminChat() {
 }
 let _chatSig = '';
 async function refreshChat() {
-  try { await Cloud.init('lume', window.__LUME_CLIENT || STORE_CLIENT); } catch (e) { }
+  // MUHIM: Cloud.init() _cache va _dirty ni TOZALAYDI (yozilib ulgurmagan
+  // o'zgarishlarni yo'qotishi mumkin). Shuning uchun refresh() ishlatamiz.
+  try { await Cloud.refresh(); } catch (e) { }
   const cch = cget('lume_chat', []); chatMsgs = Array.isArray(cch) ? cch : [];
   // Xabarlar o'zgarmagan bo'lsa qayta chizmaymiz — yozilayotgan javob saqlanadi.
   const sig = chatMsgs.length + ':' + chatMsgs.reduce((s, m) => Math.max(s, m.ts || 0), 0);
@@ -1105,6 +1595,76 @@ setInterval(() => {
   if (sec && sec.classList.contains('is-active')) refreshChat();
 }, 6000);
 
+/* ===== USERLAR (ro'yxatdan o'tgan foydalanuvchilar) ===== */
+let _usersSig = '';
+function userById(id) { return users.find(u => String(u.id) === String(id)); }
+
+function drawUsers() {
+  const cnt = $('userCount'); if (cnt) cnt.textContent = users.length;
+  const body = $('userBody'); if (!body) return;
+  const list = users.slice().sort((a, b) => (b.ts || 0) - (a.ts || 0)); // yangilari tepada
+  body.innerHTML = list.length
+    ? list.map(u => `
+      <tr>
+        <td><div class="cell-prod"><div class="emo">👤</div><div><b>${esc(u.name || '—')}</b><br><small class="muted">${u.ts ? new Date(u.ts).toLocaleDateString('ru-RU') : ''}</small></div></div></td>
+        <td><span class="num">${esc(u.phone || '—')}</span></td>
+        <td><div class="act-btns" style="justify-content:flex-end;flex-wrap:wrap;gap:6px">
+          <button class="btn btn--ghost" style="height:32px;padding:0 12px;font-size:12.5px" onclick="userInfo('${esc(u.id)}')">${ICONS.info}User haqida</button>
+          <button class="iact" onclick="messageUser('${esc(u.id)}')" title="Xabar yuborish" aria-label="Xabar">${ICONS.chat}</button>
+          <button class="iact danger" onclick="delUser('${esc(u.id)}')" title="O'chirish" aria-label="O'chirish">${ICONS.del}</button>
+        </div></td>
+      </tr>`).join('')
+    : `<tr><td colspan="3"><div class="empty"><div class="e-emo">👤</div><h4>Hali foydalanuvchi yo'q</h4><p class="muted">Mobil ilovada ro'yxatdan o'tgan foydalanuvchilar shu yerda ko'rinadi.</p></div></td></tr>`;
+}
+
+function userInfo(id) {
+  const u = userById(id); if (!u) return;
+  const row = (label, val) => `<div class="field span2"><label>${label}</label>
+    <div style="padding:11px 14px;background:var(--surface-2);border:1px solid var(--border);border-radius:10px;font-weight:600;font-size:14px">${esc(val || '—')}</div></div>`;
+  const body = `<div class="form-grid">
+      ${row('Ism', u.name)}
+      ${row('Telefon raqami', u.phone)}
+      ${row('Manzil', u.addr)}
+    </div>
+    <p class="muted" style="font-size:12px;margin-top:14px">Ro'yxatdan o'tgan: ${u.ts ? new Date(u.ts).toLocaleString('ru-RU') : '—'}</p>`;
+  const foot = `<button class="btn btn--ghost" onclick="closeModal()">Yopish</button>
+    <button class="btn btn--primary" onclick="closeModal();messageUser('${esc(u.id)}')">Xabar yuborish</button>`;
+  openModal('User haqida', body, foot);
+}
+
+function messageUser(id) {
+  const u = userById(id); if (!u) return;
+  chatSelected = (u.name || '').trim() || 'Mijoz';
+  nav('chat'); // habarlar menyusi ochiladi, shu user tanlangan holda
+}
+
+async function delUser(id) {
+  const u = userById(id); if (!u) return;
+  if (!confirm(`"${u.name || 'Foydalanuvchi'}"ni o'chirmoqchimisiz?\n\nHaqiqatan ham ishonchingiz komilmi?`)) return;
+  // refresh → merge → write: serverdagi eng yangi ro'yxatni olib, undan o'chiramiz
+  // (boshqa yangi ro'yxatdan o'tganlarni yo'qotmaslik uchun).
+  await Cloud.refresh();
+  const cur = cget('lume_users', []); users = Array.isArray(cur) ? cur : [];
+  users = users.filter(x => String(x.id) !== String(id));
+  cset('lume_users', users);
+  drawUsers();
+  toast('Foydalanuvchi o\'chirildi');
+}
+
+// Userlar bo'limi ochiq bo'lsa — fonda yangilab turamiz.
+// MUHIM: cget faqat XOTIRADAGI keshdan o'qiydi — avval serverdan refresh() qilamiz,
+// aks holda yangi ro'yxatdan o'tganlar (Chat bo'limi ochilmasa) umuman ko'rinmaydi.
+setInterval(async () => {
+  const sec = $('sec-users');
+  if (!sec || !sec.classList.contains('is-active')) return;
+  await Cloud.refresh();
+  const cu = cget('lume_users', null);
+  const arr = Array.isArray(cu) ? cu.filter(x => x && x.id) : [];
+  const sig = arr.length + ':' + arr.reduce((s, u) => Math.max(s, u.ts || 0), 0);
+  if (sig === _usersSig) return;
+  _usersSig = sig; users = arr; drawUsers();
+}, 8000);
+
 /* ===== SETTINGS ===== */
 function drawSettings() {
   $('setBrand').value = settings.brand || '';
@@ -1112,9 +1672,15 @@ function drawSettings() {
   $('setPhone').value = settings.phone || '';
   $('setTg').value = settings.tg || '';
   $('clientLabel').textContent = window.__LUME_CLIENT || 'shop';
-  const url = new URL('index.html', location.href);
-  if ((window.__LUME_CLIENT || 'shop') !== 'shop') url.searchParams.set('client', window.__LUME_CLIENT);
-  $('shopUrl').textContent = url.href;
+  // Bosh admin hisobi karti — faqat bosh adminga ko'rinadi, maydonlar to'ldiriladi.
+  const sc = $('superCard');
+  if (sc) sc.style.display = isSuper() ? '' : 'none';
+  const sa = superAcc();
+  if ($('supName')) $('supName').value = sa.name || '';
+  if ($('supLogin')) $('supLogin').value = sa.login || '';
+  if ($('supPassCur')) $('supPassCur').value = '';
+  if ($('supPassNew')) $('supPassNew').value = '';
+  if ($('supPassNew2')) $('supPassNew2').value = '';
 }
 function saveSettings() {
   settings = {
@@ -1124,6 +1690,42 @@ function saveSettings() {
     tg: $('setTg').value.trim()
   };
   cset('lume_settings', settings); toast('Sozlamalar saqlandi');
+}
+
+// Bosh admin login / parol / ismini o'zgartirish (joriy parol bilan tasdiqlanadi).
+async function saveSuper() {
+  if (!isSuper()) { toast('Faqat bosh admin o\'zgartira oladi', 'err'); return; }
+  const name = ($('supName').value || '').trim();
+  const login = ($('supLogin').value || '').trim();
+  const cur = $('supPassCur').value || '';
+  const np = $('supPassNew').value || '';
+  const np2 = $('supPassNew2').value || '';
+  const sup = superAcc();
+  if (!login) { toast('Login bo\'sh bo\'lmasin', 'err'); return; }
+  if (cur !== sup.pass) { toast('Joriy parol noto\'g\'ri', 'err'); return; }
+  // Login boshqa admin bilan to'qnashmasin
+  if (admins.some(a => (a.login || '').toLowerCase() === login.toLowerCase())) {
+    toast('Bu login boshqa adminda band', 'err'); return;
+  }
+  let newPass = sup.pass;
+  if (np || np2) {
+    if (np.length < 4) { toast('Yangi parol kamida 4 belgi bo\'lsin', 'err'); return; }
+    if (np !== np2) { toast('Yangi parollar mos kelmadi', 'err'); return; }
+    newPass = np;
+  }
+  // refresh → merge → write
+  await Cloud.refresh();
+  superCfg = { login, pass: newPass, name: name || sup.name };
+  cset('lume_super', superCfg);
+  // Joriy sessiyani yangilaymiz (login o'zgargan bo'lsa ham qayta kirish shart bo'lmaydi).
+  if (currentAdmin && currentAdmin.role === 'super') {
+    currentAdmin = superAcc();
+    setSession(currentAdmin);
+    const pn = $('profName'); if (pn) pn.textContent = currentAdmin.name || currentAdmin.login;
+  }
+  $('supPassCur').value = ''; $('supPassNew').value = ''; $('supPassNew2').value = '';
+  toast('Bosh admin ma\'lumotlari saqlandi');
+  const sec = $('sec-admins'); if (sec && sec.classList.contains('is-active')) drawAdmins();
 }
 
 /* ===== TELEGRAM BOT ===== */
@@ -1264,10 +1866,11 @@ function botDisconnect() {
 function permLabel(s) { const n = NAV.find(x => x[0] === s); return n ? n[1] : s; }
 function drawAdmins() {
   $('adminCount').textContent = admins.length + 1; // +1 = bosh admin
+  const sup = superAcc();
   const rowSuper = `
     <tr>
-      <td><div class="cell-prod"><div class="emo">👑</div><div><b>${esc(SUPER.name)}</b><br><small class="muted">Barcha menyular</small></div></div></td>
-      <td><span class="num">${esc(SUPER.login)}</span></td>
+      <td><div class="cell-prod"><div class="emo">👑</div><div><b>${esc(sup.name)}</b><br><small class="muted">Barcha menyular</small></div></div></td>
+      <td><span class="num">${esc(sup.login)}</span></td>
       <td><span class="pill done">Barchasi</span></td>
       <td><span class="pill faol">Bosh admin</span></td>
       <td></td>
@@ -1318,7 +1921,7 @@ function saveAdmin(id) {
   const pass = $('a-pass').value;
   if (!login) { toast('Login kiriting', 'err'); return; }
   if (!pass) { toast('Parol kiriting', 'err'); return; }
-  if (login.toLowerCase() === SUPER.login.toLowerCase()) { toast('Bu login band (bosh admin)', 'err'); return; }
+  if (login.toLowerCase() === superAcc().login.toLowerCase()) { toast('Bu login band (bosh admin)', 'err'); return; }
   const dup = admins.find(x => x.login.toLowerCase() === login.toLowerCase() && x.id !== id);
   if (dup) { toast('Bu login allaqachon mavjud', 'err'); return; }
   const perms = [...document.querySelectorAll('#permList .perm-item.on')].map(el => el.dataset.p);
@@ -1340,12 +1943,14 @@ function delAdmin(id) {
 const SESSION_KEY = 'lume_admin_session';
 function resolveAdmin(login) {
   if (!login) return null;
-  if (login.toLowerCase() === SUPER.login.toLowerCase()) return SUPER;
+  const sup = superAcc();
+  if (login.toLowerCase() === sup.login.toLowerCase()) return sup;
   return admins.find(x => x.login.toLowerCase() === login.toLowerCase()) || null;
 }
 function tryLogin(login, pass) {
   login = (login || '').trim();
-  if (login.toLowerCase() === SUPER.login.toLowerCase()) return pass === SUPER.pass ? SUPER : null;
+  const sup = superAcc();
+  if (login.toLowerCase() === sup.login.toLowerCase()) return pass === sup.pass ? sup : null;
   const a = admins.find(x => x.login.toLowerCase() === login.toLowerCase());
   return (a && a.pass === pass) ? a : null;
 }
@@ -1380,6 +1985,8 @@ function restoreSession() {
 function loadData() {
   const ca = cget('lume_admins', null);
   admins = Array.isArray(ca) ? ca.filter(a => a && a.login && a.id) : [];
+  const csup = cget('lume_super', null);
+  superCfg = (csup && typeof csup === 'object') ? csup : {};
   const cbot = cget('lume_bot', null);
   if (cbot && typeof cbot === 'object') botCfg = Object.assign({ token: '', channel: '', username: '', enabled: false }, cbot);
   const cmeta = cget('lume_chat_meta', null);
@@ -1408,6 +2015,12 @@ function loadData() {
   promos = Array.isArray(cpr) ? cpr.filter(x => x && x.id) : [];
   const cs = cget('lume_settings', null);
   if (cs && typeof cs === 'object') settings = Object.assign(settings, cs);
+  const ccm = cget('lume_commissions', null);
+  commissions = Array.isArray(ccm) ? ccm.filter(x => x && x.id && x.name) : [];
+  const cexp = cget('lume_expenses', null);
+  monthlyExpense = +cexp || 0;
+  const cu = cget('lume_users', null);
+  users = Array.isArray(cu) ? cu.filter(x => x && x.id) : [];
 }
 
 function fmtDate() {
@@ -1423,7 +2036,16 @@ function fmtDate() {
   try { const th = localStorage.getItem('lume_admin_theme'); if (th) document.documentElement.dataset.theme = th; } catch (e) { }
   syncTheme();
   $('themeBtn').onclick = flip;
-  $('burger').onclick = () => $('sidebar').classList.toggle('open');
+  // Mobil menyu (drawer) — burger ochadi/yopadi, orqa fon bosilsa yopiladi.
+  function toggleDrawer(open) {
+    const sb = $('sidebar'), sc = $('sidebarScrim');
+    const willOpen = open === undefined ? !sb.classList.contains('open') : open;
+    sb.classList.toggle('open', willOpen);
+    if (sc) sc.classList.toggle('show', willOpen);
+  }
+  $('burger').onclick = () => toggleDrawer();
+  const _scrim = $('sidebarScrim');
+  if (_scrim) _scrim.onclick = () => toggleDrawer(false);
   const td = $('topDate'); if (td) td.textContent = fmtDate();
 
   buildNav();
@@ -1481,12 +2103,14 @@ function fmtDate() {
 
 // global (onclick uchun)
 Object.assign(window, {
-  nav, openProd, saveProd, delProd, refreshPrev, setFit, onImg, removeImg,
+  nav, drawStats, setStatsPeriod, addCommission, delCommission, saveExpenses,
+  openProd, saveProd, delProd, refreshPrev, setFit, onImg, removeImgAt, makeMainImg, renderProdImgs,
   openCat, saveCat, delCat, onCatImg, onCatImgR, removeCatImg, removeCatImgR, setCatFit, setCatFitR, refreshCatPrev, refreshCatPrevR,
-  onBannerFiles, moveBanner, delBanner, setStatus, delOrder, clearOrders, openOrder, downloadReceipt,
+  onBannerFiles, moveBanner, delBanner, setStatus, delOrder, clearOrders, refreshOrders, openOrder, downloadReceipt,
   drawPromos, openPromo, setPromoStyle, togglePromoProd, savePromo, delPromo, movePromo,
   setOrdFilter, drawArxiv, restoreOrder, delArxiv, clearArxiv,
-  drawChat, sendAdminChat, refreshChat, setChatFilter, selectConv, backChat, toggleStar, toggleArchive, saveSettings, flip, closeModal,
+  drawChat, sendAdminChat, refreshChat, setChatFilter, selectConv, backChat, toggleStar, toggleArchive, saveSettings, saveSuper, flip, closeModal,
+  drawUsers, userInfo, messageUser, delUser,
   openAdmin, saveAdmin, delAdmin, togglePerm, logout,
   drawBot, botSaveTest, botTestOrder, botDisconnect
 });
