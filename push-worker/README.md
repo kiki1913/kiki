@@ -28,8 +28,7 @@ Ikki manba shu jadvalga yozadi:
 > `order_notification_state (order_id, last_status)` jadvali ishlatiladi.
 
 ## 1. Ma'lumotlar bazasi
-Migratsiyalar `supabase/migrations/` da. IKKALASINI ham tartib bilan
-qo'llang (VPS'da):
+Migratsiyalar `supabase/migrations/` da. HAMMASINI tartib bilan qo'llang (VPS'da):
 
 ```bash
 # Docker konteyner nomi o'zingizniki bilan almashtiring (masalan supabase-db):
@@ -37,9 +36,11 @@ docker exec -i supabase-db psql -U postgres -d postgres \
   < 20260904000000_push_notifications.sql
 docker exec -i supabase-db psql -U postgres -d postgres \
   < 20260904010000_order_status_notifications.sql   # target_user_id + order_notification_state
+docker exec -i supabase-db psql -U postgres -d postgres \
+  < 20260904020000_user_push_tokens_nullable.sql    # token NULL bo'lishi mumkin; user_id = PK
 ```
-Migratsiyadan so'ng PostgREST yangi ustunni (target_user_id) ko'rishi uchun schema
-keshini yangilang: `docker exec -i supabase-db psql -U postgres -d postgres -c "NOTIFY pgrst, 'reload schema';"`
+Migratsiyadan so'ng PostgREST yangi ustun/cheklovlarni ko'rishi uchun schema keshini
+yangilang: `docker exec -i supabase-db psql -U postgres -d postgres -c "NOTIFY pgrst, 'reload schema';"`
 
 ## 2. Postgres'ga ulanish (DATABASE_URL)
 Ikki variant:
