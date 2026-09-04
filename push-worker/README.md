@@ -28,7 +28,7 @@ Ikki manba shu jadvalga yozadi:
 > `order_notification_state (order_id, last_status)` jadvali ishlatiladi.
 
 ## 1. Ma'lumotlar bazasi
-Migratsiyalar `kikiadmin/supabase/migrations/` da. IKKALASINI ham tartib bilan
+Migratsiyalar `supabase/migrations/` da. IKKALASINI ham tartib bilan
 qo'llang (VPS'da):
 
 ```bash

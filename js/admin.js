@@ -157,7 +157,7 @@ const NAV = [
   ['admins', 'Adminlar', 'Adminlarni boshqarish']
 ];
 // Yangi admin uchun belgilanadigan menyular (admins bundan tashqari — faqat bosh admin).
-const PERM_KEYS = ['dash', 'stats', 'prods', 'cats', 'banner', 'orders', 'arxiv', 'chat', 'users', 'bot', 'settings'];
+const PERM_KEYS = ['dash', 'stats', 'prods', 'cats', 'banner', 'orders', 'arxiv', 'chat', 'notif', 'users', 'bot', 'settings'];
 // Mobil tab-barda ko'rinishi mumkin bo'lgan bo'limlar (ruxsatga qarab filtr qilinadi).
 const TAB_KEYS = ['dash', 'prods', 'orders', 'chat', 'settings'];
 
