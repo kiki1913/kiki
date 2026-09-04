@@ -1,5 +1,5 @@
 /* ============================================================
-   LUMÉ — Admin panel mantiq (js/admin.js)
+   KIKI — Admin panel mantiq (js/admin.js)
    Dizayn: ovqat-dokoni admin. Funksiyalar: lume mobil ilova bilan
    AYNAN bir xil — Supabase app='lume' ostida ishlaydi.
    Kalitlar: lume_products, lume_categories, lume_banners,
@@ -61,7 +61,7 @@ const ART_KEYS = [['found', 'Tonal / found'], ['doubtless', 'Parfyum'], ['fixer'
 
 const DEFAULT_PRODUCTS = [];
 
-let products = [], orders = [], banners = [], settings = { brand: 'LUMÉ', phone: '+998 71 200 00 00', tg: '@lume_support', ship: 25000 };
+let products = [], orders = [], banners = [], settings = { brand: 'KIKI', phone: '+998 71 200 00 00', tg: '@lume_support', ship: 25000 };
 let archivedOrders = [];  // arxivlangan (o'chirilgan) buyurtmalar — lume_orders_archive
 let promos = [];          // chegirma bo'limlari — lume_promos
 let commissions = [];     // pul o'tkazma komissiyalari — lume_commissions [{id,name,pct}]
@@ -511,7 +511,7 @@ function drawQr() {
   const url = shopUrl();
   const inp = $('qrUrlInput'); if (inp) inp.value = url;
   const img = $('qrCodeImg'); if (img) img.src = qrApiSrc(url, 440);
-  const nm = $('qrStoreName'); if (nm) nm.textContent = settings.brand || 'LUMÉ';
+  const nm = $('qrStoreName'); if (nm) nm.textContent = settings.brand || 'KIKI';
 }
 function setupQr() {
   const by = (id, fn) => { const el = $(id); if (el) el.onclick = fn; };
@@ -1477,7 +1477,7 @@ function downloadReceipt(id) {
   const st = OSTAT[o.status] || ['—'];
   const itemsSum = (o.items || []).reduce((s, it) => s + (+it.p || 0) * (+it.q || 1), 0);
   const ship = Math.max(0, (+o.total || 0) - itemsSum);
-  const brand = esc(settings.brand || 'LUMÉ');
+  const brand = esc(settings.brand || 'KIKI');
   const rows = (o.items || []).map(it =>
     `<tr><td>${esc(it.n)}</td><td class="c">${it.q}</td><td class="r">${som(it.p)}</td><td class="r">${som((+it.p || 0) * (+it.q || 1))}</td></tr>`).join('');
   const html = `<!doctype html><html lang="uz"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Chek ${esc(o.id)}</title>
@@ -1844,7 +1844,7 @@ function drawSettings() {
 }
 function saveSettings() {
   settings = {
-    brand: $('setBrand').value.trim() || 'LUMÉ',
+    brand: $('setBrand').value.trim() || 'KIKI',
     ship: +$('setShip').value.replace(/\D/g, '') || 0,
     phone: $('setPhone').value.trim(),
     tg: $('setTg').value.trim()
@@ -1917,7 +1917,7 @@ function formatOrderMsg(o) {
   const lines = (o.items || []).map(it => `• ${esc(it.n)} × ${it.q} — ${som((it.p || 0) * (it.q || 1))}`).join('\n');
   const pay = ({ card: 'Karta (Uzcard / Humo)', payme: 'Payme', click: 'Click', cash: 'Naqd' })[o.pay] || 'Naqd';
   return `🛒 <b>Yangi buyurtma</b>  ${esc(o.id || '')}\n` +
-    `🏬 <b>${esc(settings.brand || 'LUMÉ')}</b>\n\n` +
+    `🏬 <b>${esc(settings.brand || 'KIKI')}</b>\n\n` +
     `${lines || '—'}\n\n` +
     `💰 Jami: <b>${som(o.total)}</b>\n` +
     `💳 To'lov: ${pay}\n` +
@@ -1989,7 +1989,7 @@ async function botSaveTest() {
     await tgApi(token, 'sendMessage', {
       chat_id: channel,
       parse_mode: 'HTML',
-      text: `✅ <b>${esc(settings.brand || 'LUMÉ')}</b> — bot ulandi!\nEndi buyurtmalar shu kanalga tushadi.`
+      text: `✅ <b>${esc(settings.brand || 'KIKI')}</b> — bot ulandi!\nEndi buyurtmalar shu kanalga tushadi.`
     });
     botCfg = { token, channel, username: me.username || '', enabled: true };
     // UMUMIY (shared) joyga yozamiz — barcha adminlar va mobil ilova bir xil o'qiydi.
