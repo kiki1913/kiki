@@ -151,6 +151,34 @@ window.Cloud = (function () {
       }
     },
 
+    // ---- DO'KON BO'YICHA UMUMIY (shared) sozlamalar ----
+    // Bot kabi sozlamalar sessiya client_id'sidan QAT'I NAZAR bitta joyda (kanonik
+    // do'kon client'i ostida) saqlanadi — shunda BARCHA adminlar va mobil ilova
+    // AYNAN bir xil qiymatni o'qiydi. (Aks holda har admin/qurilma o'z partitiyasiga
+    // yozib, boshqalar ko'rmay qolardi.)
+    _sharedClient() {
+      return (typeof STORE_CLIENT !== "undefined" && STORE_CLIENT) ? STORE_CLIENT : "CL-MT9YR2SB2ZLJ";
+    },
+    async getShared(key, fallback = null) {
+      if (!_sb) return fallback;
+      try {
+        const { data, error } = await _sb.from("app_state").select("value")
+          .eq("app", this.app).eq("client_id", this._sharedClient()).eq("key", key)
+          .maybeSingle();
+        if (error) { console.error("[Cloud] getShared:", error); return fallback; }
+        return (data && data.value != null) ? data.value : fallback;
+      } catch (e) { console.error("[Cloud] getShared(net):", e); return fallback; }
+    },
+    async setShared(key, value) {
+      if (!_sb) throw new Error("Supabase sozlanmagan");
+      const { error } = await _sb.from("app_state").upsert(
+        { app: this.app, client_id: this._sharedClient(), key, value, updated_at: new Date().toISOString() },
+        { onConflict: "app,client_id,key" }
+      );
+      if (error) throw error;
+      return true;
+    },
+
     // O'chirish (localStorage.removeItem o'rnida) — HAR DOIM serverdan ham o'chiradi
     remove(key) {
       delete this._cache[key];
