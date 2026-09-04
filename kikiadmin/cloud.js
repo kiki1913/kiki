@@ -164,17 +164,32 @@ window.Cloud = (function () {
     },
 
     // Push bildirishnoma yuborish — `notifications` jadvaliga INSERT qiladi.
-    // Worker (VPS) buni LISTEN/NOTIFY orqali ushlab, barcha qurilmalarga push yuboradi.
-    // Admin panelda alohida push-yuborish kodi kerak emas — faqat bazaga yozish.
+    // Worker (VPS) buni LISTEN/NOTIFY orqali ushlab, BARCHA qurilmalarga push
+    // yuboradi (target_user_id = NULL => broadcast). Bu "admin bilan chat"dan
+    // MUTLAQO alohida — chat lume_chat KV'da qoladi.
     async sendNotification(title, body) {
       if (!_sb) throw new Error("Supabase sozlanmagan — bildirishnoma yuborib bo'lmaydi");
       const { error } = await _sb.from("notifications").insert({
         title: title,
         body: body || "",
-        type: "broadcast",
+        type: "admin_broadcast",
+        target_user_id: null,   // NULL = barcha foydalanuvchilarga
       });
       if (error) throw error;
       return true;
+    },
+
+    // Yuborilgan admin bildirishnomalari tarixi (yangi birinchi).
+    async listNotifications(limit = 20) {
+      if (!_sb) return [];
+      const { data, error } = await _sb
+        .from("notifications")
+        .select("id,title,body,type,created_at,processed")
+        .in("type", ["admin_broadcast", "broadcast"])
+        .order("created_at", { ascending: false })
+        .limit(limit);
+      if (error) { console.error("[Cloud] listNotifications:", error); return []; }
+      return data || [];
     },
   };
 })();

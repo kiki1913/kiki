@@ -216,11 +216,38 @@ function nav(s) {
 }
 
 /* ===== BILDIRISHNOMA (push) ===== */
+// MUHIM: bu "admin bilan chat" (sendAdminChat / lume_chat) dan alohida.
+// Bu yerda xabar notifications jadvaliga yoziladi va worker push yuboradi.
 function drawNotif() {
-  // Statik forma index.html'da; bu yerda maydonlarni tozalaymiz.
   const t = $('notifTitle'), b = $('notifBody');
   if (t) t.value = '';
   if (b) b.value = '';
+  loadNotifHistory();
+}
+
+async function loadNotifHistory() {
+  const box = $('notifHistory');
+  if (!box) return;
+  box.innerHTML = '<div class="muted" style="padding:8px 0">Yuklanmoqda...</div>';
+  let list = [];
+  try { list = await Cloud.listNotifications(20); }
+  catch (e) { console.error('[notif] history:', e); }
+  if (!list.length) {
+    box.innerHTML = '<div class="muted" style="padding:8px 0">Hali yuborilgan bildirishnoma yo\'q.</div>';
+    return;
+  }
+  box.innerHTML = list.map(n => {
+    const dt = n.created_at ? new Date(n.created_at).toLocaleString('uz-UZ') : '';
+    const sent = n.processed ? 'Yuborildi' : 'Navbatda';
+    return `<div class="card card-pad" style="margin-bottom:10px">
+      <div style="display:flex;justify-content:space-between;gap:10px;align-items:baseline">
+        <b>${esc(n.title || '')}</b>
+        <span class="muted" style="font-size:12px;white-space:nowrap">${esc(dt)}</span>
+      </div>
+      ${n.body ? `<div style="margin-top:4px">${esc(n.body)}</div>` : ''}
+      <div class="muted" style="font-size:12px;margin-top:6px">${sent}</div>
+    </div>`;
+  }).join('');
 }
 
 async function sendNotification() {
@@ -234,6 +261,7 @@ async function sendNotification() {
     toast('Bildirishnoma yuborildi — barcha mijozlarga push ketadi');
     if ($('notifTitle')) $('notifTitle').value = '';
     if ($('notifBody')) $('notifBody').value = '';
+    loadNotifHistory();
   } catch (e) {
     console.error('[notif] sendNotification:', e);
     toast('Xatolik: yuborib bo\'lmadi');
