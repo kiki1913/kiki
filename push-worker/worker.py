@@ -126,17 +126,23 @@ async def send_to_tokens(pool, tokens: list[str], title: str, body: str, data=No
     loop = asyncio.get_running_loop()
     ok, invalid = await loop.run_in_executor(None, _send_sync, tokens, title, body, data)
     if invalid:
-        await _delete_tokens(pool, invalid)
+        await _clear_tokens(pool, invalid)
     return ok
 
 
-async def _delete_tokens(pool, tokens: Iterable[str]):
+async def _clear_tokens(pool, tokens: Iterable[str]):
+    # Eskirgan/yaroqsiz tokenni NULL qilamiz — qatorni O'CHIRMAYMIZ, chunki
+    # foydalanuvchi baribir "tanilgan" bo'lib qolishi va ilova ichidagi
+    # bildirishnomalarni (user_notifications) olishda davom etishi kerak.
     toks = list(tokens)
     if not toks:
         return
     async with pool.acquire() as con:
-        await con.execute("delete from user_push_tokens where token = any($1::text[])", toks)
-    log.info("O'chirildi (eskirgan) tokenlar: %d", len(toks))
+        await con.execute(
+            "update user_push_tokens set token = null where token = any($1::text[])",
+            toks,
+        )
+    log.info("Tozalandi (eskirgan) tokenlar: %d", len(toks))
 
 
 # --------------- Bildirishnomani yuborish (LISTEN/NOTIFY yagona yo'l) ---------
@@ -177,9 +183,11 @@ async def process_notification(pool, notif_id: int):
                 [(uid, notif_id) for uid in user_ids],
             )
 
-    tokens = [r["token"] for r in token_rows]
+    # token NULL bo'lgan foydalanuvchilar (push ruxsatsiz) chetlab o'tiladi —
+    # ular user_notifications orqali ilova ichida ko'radi (push emas).
+    tokens = [r["token"] for r in token_rows if r["token"]]
     if not tokens:
-        log.info("notification #%s: token yo'q (target=%s) — ro'yxatga yozildi",
+        log.info("notification #%s: push token yo'q (target=%s) — ro'yxatga yozildi",
                  notif_id, target or "broadcast")
         return
 
