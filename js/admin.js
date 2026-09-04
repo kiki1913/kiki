@@ -1053,7 +1053,12 @@ function makeMainImg(i) {
   refreshPrev();
   renderProdImgs();
 }
-function saveProd(id) {
+// Serverdagi eng yangi mahsulotlar ro'yxatini keshdan xotiraga o'qiydi.
+function _reloadProducts() {
+  const cp = cget('lume_products', null);
+  products = Array.isArray(cp) ? cp.map((p, i) => Object.assign({ id: p.id || i + 1 }, p)) : [];
+}
+async function saveProd(id) {
   const n = $('p-n').value.trim();
   const p = +$('p-p').value.replace(/\D/g, '');
   if (!n) { toast('Nomini kiriting', 'err'); return }
@@ -1070,13 +1075,27 @@ function saveProd(id) {
     fit: editFit, zoom: editZoom, pos: editPosX + '% ' + editPosY + '%',
     d: { uz: $('p-d').value.trim() }
   };
-  if (id) { const i = products.findIndex(x => x.id === id); if (i >= 0) products[i] = Object.assign({}, products[i], obj); }
-  else { obj.id = (products.reduce((m, x) => Math.max(m, x.id || 0), 0) || 0) + 1; products.push(obj); }
+  // MUHIM (ko'p qurilma): yozishdan OLDIN serverdan eng yangi ro'yxatni olamiz va
+  // shunga qo'shamiz — aks holda boshqa qurilma qo'shgan mahsulotlar bosib ketiladi.
+  await Cloud.refresh();
+  _reloadProducts();
+  if (id) {
+    const i = products.findIndex(x => x.id === id);
+    if (i >= 0) products[i] = Object.assign({}, products[i], obj);
+    else { obj.id = id; products.push(obj); } // boshqa qurilmada o'chirilgan bo'lsa — qayta qo'shamiz
+  } else {
+    // Vaqt asosidagi noyob ID — ikki qurilma bir xil ID yaratmasligi uchun (max+1 to'qnashardi).
+    obj.id = Date.now();
+    products.push(obj);
+  }
   cset('lume_products', products);
   closeModal(); drawProds(); drawDash(); toast('Saqlandi');
 }
-function delProd(id) {
+async function delProd(id) {
   if (!confirm('Mahsulot o\'chirilsinmi?')) return;
+  // Yozishdan oldin yangilaymiz — boshqa qurilma qo'shgan mahsulotlar yo'qolmasin.
+  await Cloud.refresh();
+  _reloadProducts();
   products = products.filter(x => x.id !== id);
   cset('lume_products', products); drawProds(); drawDash(); toast('O\'chirildi');
 }
@@ -1554,6 +1573,37 @@ setInterval(async () => {
   drawOrders(); drawDash();
 }, 10000);
 
+// Mahsulotlar bo'limi ochiq bo'lsa — har 10 soniyada serverdan yangilaymiz, shunda
+// boshqa qurilma/admin qo'shgan mahsulotlar ham ko'rinadi (o'zgargandagina qayta chizamiz).
+let _prodsSig = '';
+setInterval(async () => {
+  const sec = $('sec-prods');
+  if (!sec || !sec.classList.contains('is-active')) return;
+  await Cloud.refresh();
+  const arr = cget('lume_products', []) || [];
+  const sig = JSON.stringify((Array.isArray(arr) ? arr : []).map(p => [p.id, p.n, p.p, p.old, (p.imgs || []).length]));
+  if (sig === _prodsSig) return;
+  _prodsSig = sig;
+  _reloadProducts();
+  drawProds(); drawDash();
+}, 10000);
+
+// Bot bo'limi ochiq bo'lsa — har 10 soniyada UMUMIY sozlamani tekshiramiz, shunda
+// boshqa admin ulagan bot shu admin panelida ham ko'rinadi (o'zgargandagina qayta chizamiz).
+setInterval(async () => {
+  const sec = $('sec-bot');
+  if (!sec || !sec.classList.contains('is-active')) return;
+  const b = await Cloud.getShared('lume_bot', null);
+  const cfg = (b && typeof b === 'object')
+    ? Object.assign({ token: '', channel: '', username: '', enabled: false }, b)
+    : { token: '', channel: '', username: '', enabled: false };
+  const sig = JSON.stringify(cfg);
+  if (sig === _botSig) return;
+  _botSig = sig;
+  botCfg = cfg;
+  drawBot();
+}, 10000);
+
 /* ===== XABARLAR (chat) — ikki ustunli ===== */
 let chatFilter = 'all';   // all | day | week | month | muhim | arxiv
 let chatSelected = null;  // tanlangan suhbat (mijoz nomi)
@@ -1942,7 +1992,10 @@ async function botSaveTest() {
       text: `✅ <b>${esc(settings.brand || 'LUMÉ')}</b> — bot ulandi!\nEndi buyurtmalar shu kanalga tushadi.`
     });
     botCfg = { token, channel, username: me.username || '', enabled: true };
-    cset('lume_bot', botCfg);
+    // UMUMIY (shared) joyga yozamiz — barcha adminlar va mobil ilova bir xil o'qiydi.
+    try { await Cloud.setShared('lume_bot', botCfg); }
+    catch (err) { console.error('[bot] setShared:', err); toast('Serverga saqlashda xato', 'err'); return; }
+    _botSig = JSON.stringify(botCfg);
     drawBot();
     toast('Ulandi — kanalga test xabar yuborildi');
   } catch (e) {
@@ -1964,12 +2017,26 @@ async function botTestOrder() {
     toast('Test buyurtma kanalga yuborildi');
   } catch (e) { toast('Xato: ' + e.message, 'err'); }
 }
-function botDisconnect() {
+async function botDisconnect() {
   if (!confirm('Bot o\'chirilsinmi? Buyurtmalar kanalga yuborilmay qoladi.')) return;
   botCfg = { token: '', channel: '', username: '', enabled: false };
-  cset('lume_bot', botCfg);
+  try { await Cloud.setShared('lume_bot', botCfg); }
+  catch (err) { console.error('[bot] setShared:', err); toast('Serverga saqlashda xato', 'err'); return; }
+  _botSig = JSON.stringify(botCfg);
   drawBot();
   toast('O\'chirildi');
+}
+
+// Bot sozlamasini UMUMIY joydan yuklaydi (barcha adminlar bir xil ko'radi).
+let _botSig = '';
+async function loadBotCfg() {
+  try {
+    const b = await Cloud.getShared('lume_bot', null);
+    if (b && typeof b === 'object') {
+      botCfg = Object.assign({ token: '', channel: '', username: '', enabled: false }, b);
+      _botSig = JSON.stringify(botCfg);
+    }
+  } catch (e) { console.error('[bot] loadBotCfg:', e); }
 }
 
 /* ===== ADMINLAR boshqaruvi ===== */
@@ -2097,8 +2164,8 @@ function loadData() {
   admins = Array.isArray(ca) ? ca.filter(a => a && a.login && a.id) : [];
   const csup = cget('lume_super', null);
   superCfg = (csup && typeof csup === 'object') ? csup : {};
-  const cbot = cget('lume_bot', null);
-  if (cbot && typeof cbot === 'object') botCfg = Object.assign({ token: '', channel: '', username: '', enabled: false }, cbot);
+  // Bot sozlamasi UMUMIY (shared) joyda — loadBotCfg() orqali init'da yuklanadi
+  // (per-client cget'dan O'QIMAYMIZ, aks holda har admin boshqacha ko'rardi).
   const cmeta = cget('lume_chat_meta', null);
   if (cmeta && typeof cmeta === 'object') chatMeta = Object.assign({ starred: [], archived: [] }, cmeta);
   if (!Array.isArray(chatMeta.starred)) chatMeta.starred = [];
@@ -2182,6 +2249,7 @@ function fmtDate() {
   }
 
   loadData();
+  await loadBotCfg(); // bot sozlamasini umumiy joydan yuklaymiz (barcha adminlar bir xil)
   setupQr();
 
   // Kirish formasi
