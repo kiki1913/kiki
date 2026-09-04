@@ -5,29 +5,41 @@ Python xizmati. Maxsus API server yoki Edge Functions kerak emas — worker
 Postgres'ga to'g'ridan-to'g'ri ulanadi.
 
 ## Nima qiladi
-- **Broadcast**: `notifications` jadvaliga INSERT bo'lganda (admin panel yozadi)
-  Postgres `LISTEN/NOTIFY` orqali ushlab, barcha qurilma tokenlariga push yuboradi,
-  har bir foydalanuvchi uchun `user_notifications` yozuvini qo'shadi va
-  `notifications.processed = true` qiladi.
-- **Order delivered**: buyurtmalar KV (`app_state.lume_orders` JSONB) da saqlangani
-  uchun har `POLL_INTERVAL_SECONDS` da polling qiladi; `status = 'done'` va hali
-  push yuborilmagan (`pushed_orders` da yo'q) buyurtma egasiga push yuboradi va
-  `pushed_orders` ga belgilaydi (takror yuborilmasligi uchun).
+Hamma push bitta yo'ldan o'tadi: `notifications` jadvaliga qator qo'shilsa,
+trigger `LISTEN/NOTIFY` orqali worker'ni uyg'otadi, worker push jo'natadi va
+`user_notifications` ni to'ldiradi (ilova ichidagi ro'yxat uchun), so'ng
+`processed = true` qiladi.
+- `target_user_id = NULL` → **broadcast** (barcha qurilmalarga).
+- `target_user_id = <uid>` → **faqat o'sha foydalanuvchiga**.
+
+Ikki manba shu jadvalga yozadi:
+- **Admin broadcast**: admin panel `notifications` ga to'g'ridan-to'g'ri INSERT qiladi.
+- **Order status**: buyurtmalar KV (`app_state.lume_orders` JSONB) da bo'lgani uchun
+  worker har `POLL_INTERVAL_SECONDS` da polling qiladi. Status `NOTIFY_STATUSES`
+  (standart: `plane,arrived,way,done`) ichida bo'lsa VA oldingi push'dan farq qilsa
+  (`order_notification_state`), targeted notifications qatori qo'shadi. Shu tariqa
+  **har bir holat o'zgarishi** (Samalyotda → Toshkentga yetib keldi → Yo'lda →
+  Yetkazib berildi) uchun bitta push ketadi, bir xil status takrorlanmaydi.
+  `collecting` (Yig'ilmoqda) — boshlang'ich, push yo'q.
 - Eskirgan/yaroqsiz tokenlarni `user_push_tokens` dan avtomatik o'chiradi.
 
 > **Arxitektura eslatmasi:** alohida `orders` jadvali yo'q (KV model), shu sabab
-> `orders.push_sent` o'rniga `pushed_orders` dedupe jadvali ishlatiladi va order
-> tomoni trigger emas, polling bilan ishlaydi. Broadcast tomoni esa LISTEN/NOTIFY.
+> order tomoni trigger emas, polling bilan ishlaydi va takrorlanmaslik uchun
+> `order_notification_state (order_id, last_status)` jadvali ishlatiladi.
 
 ## 1. Ma'lumotlar bazasi
-Migration `kikiadmin/supabase/migrations/20260904000000_push_notifications.sql`
-faylida. Uni bazaga qo'llang (VPS'da):
+Migratsiyalar `kikiadmin/supabase/migrations/` da. IKKALASINI ham tartib bilan
+qo'llang (VPS'da):
 
 ```bash
 # Docker konteyner nomi o'zingizniki bilan almashtiring (masalan supabase-db):
 docker exec -i supabase-db psql -U postgres -d postgres \
   < 20260904000000_push_notifications.sql
+docker exec -i supabase-db psql -U postgres -d postgres \
+  < 20260904010000_order_status_notifications.sql   # target_user_id + order_notification_state
 ```
+Migratsiyadan so'ng PostgREST yangi ustunni (target_user_id) ko'rishi uchun schema
+keshini yangilang: `docker exec -i supabase-db psql -U postgres -d postgres -c "NOTIFY pgrst, 'reload schema';"`
 
 ## 2. Postgres'ga ulanish (DATABASE_URL)
 Ikki variant:
@@ -73,7 +85,7 @@ journalctl -u push-worker -f        # jonli loglar
 ```
 
 ## 5. Tekshirish
-1. **Order delivered**: bazada bitta buyurtma statusini qo'lda `done` qiling
+1. **Order status**: bazada bitta buyurtma statusini qo'lda `plane` (keyin `way`) qiling
    (app_state.lume_orders ichida) → ~POLL_INTERVAL ичida push kelishi kerak.
 2. **Broadcast**: `insert into notifications (title, body) values ('Test','Salom');`
    → worker darhol LISTEN orqali ushlab, barcha tokenlarga push yuboradi.

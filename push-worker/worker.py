@@ -2,12 +2,19 @@
 """
 KIKI push-worker — self-hosted Supabase (Uztelecom VPS) uchun FCM push xizmati.
 
-Ikki manba bilan ishlaydi:
-  1) BROADCAST (admin xabari) — `notifications` jadvaliga INSERT bo'lganda
-     Postgres LISTEN/NOTIFY ('new_notification') orqali deyarli real vaqtda.
-  2) ORDER DELIVERED — buyurtmalar KV (`app_state.lume_orders` JSONB) da
-     saqlangani uchun har POLL_INTERVAL soniyada polling: status='done' va
-     hali push yuborilmagan (pushed_orders'da yo'q) buyurtmalarga push.
+Yagona yo'l: har qanday push `notifications` jadvaliga qator qo'shilishidan
+boshlanadi. Trigger `pg_notify('new_notification')` yuboradi, worker uni ushlab
+push jo'natadi va `user_notifications` ni to'ldiradi (ilova ichidagi ro'yxat uchun).
+target_user_id NULL = broadcast (barchaga), to'ldirilgan = faqat o'sha userga.
+
+Ikki manba shu jadvalga yozadi:
+  1) BROADCAST — admin panel `notifications` ga to'g'ridan-to'g'ri INSERT qiladi
+     (target_user_id = NULL).
+  2) ORDER STATUS — buyurtmalar KV (`app_state.lume_orders` JSONB) da bo'lgani
+     uchun worker har POLL_INTERVAL soniyada polling qiladi: status NOTIFY_STATUSES
+     ichida bo'lsa va oldingi push'dan farq qilsa (order_notification_state),
+     targeted notifications qatori qo'shadi. Shu tariqa HAR bir holat o'zgarishi
+     (plane → arrived → way → done) uchun bitta push ketadi, takror emas.
 
 Postgres'ga TO'G'RIDAN-TO'G'RI (asyncpg) ulanadi va RLS'ni chetlab o'tadi.
 """
@@ -32,14 +39,41 @@ DATABASE_URL = os.environ["DATABASE_URL"]  # postgresql://user:pass@host:port/db
 FIREBASE_CREDENTIALS = os.environ["FIREBASE_CREDENTIALS"]  # service account .json yo'li
 APP_NAME = os.getenv("APP_NAME", "lume")
 ORDERS_KEY = os.getenv("ORDERS_KEY", "lume_orders")
-DELIVERED_STATUS = os.getenv("DELIVERED_STATUS", "done")  # ilovadagi "yetkazib berildi"
 POLL_INTERVAL = int(os.getenv("POLL_INTERVAL_SECONDS", "8"))
 CHANNEL_ID = os.getenv("ANDROID_CHANNEL_ID", "kiki_default")
 
-DELIVERED_TITLE = os.getenv("DELIVERED_TITLE", "Buyurtmangiz yetib keldi 🎉")
-DELIVERED_BODY = os.getenv(
-    "DELIVERED_BODY", "Buyurtmangiz BTS filialiga yetib keldi. Olib ketishingiz mumkin."
-)
+# Push yuboriladigan buyurtma holatlari (status kodlari — ilova bilan bir xil).
+# 'collecting' (Yig'ilmoqda) — boshlang'ich holat, push YUBORILMAYDI.
+NOTIFY_STATUSES = [
+    s.strip()
+    for s in os.getenv("NOTIFY_STATUSES", "plane,arrived,way,done").split(",")
+    if s.strip()
+]
+
+# Har bir status uchun push matni (title, body). .env dan alohida to'ldirish
+# shart emas — bu yerda o'zbekcha standart matnlar. "done" uchun eski
+# DELIVERED_TITLE/BODY o'zgaruvchilari ham hisobga olinadi (moslik uchun).
+STATUS_MESSAGES = {
+    "plane": (
+        "Buyurtmangiz yo'lga chiqdi ✈️",
+        "Buyurtmangiz samolyotda, tez orada yetib keladi.",
+    ),
+    "arrived": (
+        "Buyurtmangiz Toshkentga yetib keldi 📍",
+        "Buyurtmangiz Toshkentga yetib keldi.",
+    ),
+    "way": (
+        "Buyurtmangiz yo'lda 🚚",
+        "Buyurtmangiz filialga yo'lda.",
+    ),
+    "done": (
+        os.getenv("DELIVERED_TITLE", "Buyurtmangiz yetib keldi 🎉"),
+        os.getenv(
+            "DELIVERED_BODY",
+            "Buyurtmangiz BTS filialiga yetib keldi. Olib ketishingiz mumkin.",
+        ),
+    ),
+}
 
 logging.basicConfig(
     level=logging.INFO,
@@ -105,42 +139,56 @@ async def _delete_tokens(pool, tokens: Iterable[str]):
     log.info("O'chirildi (eskirgan) tokenlar: %d", len(toks))
 
 
-# ------------------------- Broadcast (LISTEN/NOTIFY) -------------------------
+# --------------- Bildirishnomani yuborish (LISTEN/NOTIFY yagona yo'l) ---------
+# Har qanday notifications qatori (admin broadcast YOKI order-status) shu yerdan
+# o'tadi: target_user_id NULL bo'lsa barchaga, to'ldirilgan bo'lsa faqat o'sha userga.
 async def process_notification(pool, notif_id: int):
     async with pool.acquire() as con:
         # Atomik "claim" — processed=false bo'lsagina biz olamiz (ikki marta yuborilmasin).
         row = await con.fetchrow(
             "update notifications set processed = true "
             "where id = $1 and processed = false "
-            "returning title, body, type",
+            "returning title, body, type, target_user_id",
             notif_id,
         )
         if row is None:
             log.info("notification #%s allaqachon ishlangan yoki topilmadi", notif_id)
             return
-        # Barcha (user_id, token) juftliklari.
-        token_rows = await con.fetch("select user_id, token from user_push_tokens")
+        target = row["target_user_id"]
+        if target:
+            # Faqat bitta foydalanuvchi.
+            token_rows = await con.fetch(
+                "select user_id, token from user_push_tokens where user_id = $1",
+                target,
+            )
+            user_ids = {target}
+        else:
+            # Broadcast — barcha foydalanuvchilar.
+            token_rows = await con.fetch("select user_id, token from user_push_tokens")
+            user_ids = {r["user_id"] for r in token_rows}
 
-    if not token_rows:
-        log.info("notification #%s: token yo'q, faqat yozib qo'yildi", notif_id)
-        return
+    # Ilova ichida ko'rinishi uchun user_notifications HAR DOIM yoziladi
+    # (token bo'lmasa ham — foydalanuvchi ro'yxatda ko'radi).
+    if user_ids:
+        async with pool.acquire() as con:
+            await con.executemany(
+                "insert into user_notifications (user_id, notification_id) "
+                "values ($1, $2) on conflict do nothing",
+                [(uid, notif_id) for uid in user_ids],
+            )
 
     tokens = [r["token"] for r in token_rows]
-    user_ids = {r["user_id"] for r in token_rows}
+    if not tokens:
+        log.info("notification #%s: token yo'q (target=%s) — ro'yxatga yozildi",
+                 notif_id, target or "broadcast")
+        return
 
     ok = await send_to_tokens(
         pool, tokens, row["title"], row["body"],
         data={"type": row["type"], "notification_id": notif_id},
     )
-
-    # Har bir foydalanuvchiga ilova ichida ko'rinishi uchun yozuv (agar yo'q bo'lsa).
-    async with pool.acquire() as con:
-        await con.executemany(
-            "insert into user_notifications (user_id, notification_id) "
-            "values ($1, $2) on conflict do nothing",
-            [(uid, notif_id) for uid in user_ids],
-        )
-    log.info("Broadcast #%s yuborildi: %d/%d token", notif_id, ok, len(tokens))
+    log.info("Notif #%s (%s) yuborildi: %d/%d token",
+             notif_id, target or "broadcast", ok, len(tokens))
 
 
 async def listen_broadcasts(pool):
@@ -209,37 +257,49 @@ async def _scan_orders_once(pool):
         for order in value:
             if not isinstance(order, dict):
                 continue
-            if str(order.get("status")) != DELIVERED_STATUS:
+            status = str(order.get("status") or "")
+            if status not in NOTIFY_STATUSES:
                 continue
             oid = str(order.get("id") or "")
             uid = str(order.get("uid") or "")
             if not oid or not uid:
                 continue
-            await _maybe_push_order(pool, oid, uid)
+            await _maybe_notify_order(pool, oid, uid, status)
 
 
-async def _maybe_push_order(pool, order_id: str, user_id: str):
-    async with pool.acquire() as con:
-        # Atomik claim — birinchi bo'lib INSERT qilgan iteratsiya push yuboradi.
-        claimed = await con.fetchrow(
-            "insert into pushed_orders (order_id) values ($1) "
-            "on conflict do nothing returning order_id",
-            order_id,
-        )
-        if claimed is None:
-            return  # allaqachon yuborilgan
-        token_rows = await con.fetch(
-            "select token from user_push_tokens where user_id = $1", user_id
-        )
-    tokens = [r["token"] for r in token_rows]
-    if not tokens:
-        log.info("order %s: %s uchun token yo'q (dedupe belgilandi)", order_id, user_id)
-        return
-    ok = await send_to_tokens(
-        pool, tokens, DELIVERED_TITLE, DELIVERED_BODY,
-        data={"type": "order", "order_id": order_id},
+async def _maybe_notify_order(pool, order_id: str, user_id: str, status: str):
+    """Status o'zgargan bo'lsa — notifications'ga qator qo'shadi (trigger orqali
+    push + user_notifications ketadi) va order_notification_state'ni yangilaydi.
+    Bir xil status uchun takror push yubormaydi."""
+    title, body = STATUS_MESSAGES.get(
+        status, ("Buyurtma holati yangilandi", "Buyurtmangiz holati o'zgardi.")
     )
-    log.info("Order %s yetib keldi push: %d/%d token", order_id, ok, len(tokens))
+    async with pool.acquire() as con:
+        async with con.transaction():
+            # Oxirgi yuborilgan status shu bilan bir xil bo'lsa — o'tkazib yuboramiz.
+            prev = await con.fetchval(
+                "select last_status from order_notification_state "
+                "where order_id = $1 for update",
+                order_id,
+            )
+            if prev == status:
+                return
+            # notifications'ga targeted qator — trigger 'new_notification' yuboradi,
+            # process_notification esa push + user_notifications bilan shug'ullanadi.
+            await con.execute(
+                "insert into notifications (title, body, type, order_id, target_user_id) "
+                "values ($1, $2, 'order_status', $3, $4)",
+                title, body, order_id, user_id,
+            )
+            await con.execute(
+                "insert into order_notification_state (order_id, last_status, notified_at) "
+                "values ($1, $2, now()) "
+                "on conflict (order_id) do update set last_status = excluded.last_status, "
+                "notified_at = now()",
+                order_id, status,
+            )
+    log.info("Order %s status '%s' — bildirishnoma yaratildi (user=%s)",
+             order_id, status, user_id)
 
 
 # --------------------------------- Main --------------------------------------
