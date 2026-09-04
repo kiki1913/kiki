@@ -218,11 +218,56 @@ function nav(s) {
 /* ===== BILDIRISHNOMA (push) ===== */
 // MUHIM: bu "admin bilan chat" (sendAdminChat / lume_chat) dan alohida.
 // Bu yerda xabar notifications jadvaliga yoziladi va worker push yuboradi.
+let _notifImg = null;               // biriktirilgan rasm (data: URL, siqilgan)
+let _notifProdSel = new Set();      // biriktirilgan mahsulot ID'lari (chegirma pickeri uslubida)
+
 function drawNotif() {
   const t = $('notifTitle'), b = $('notifBody');
   if (t) t.value = '';
   if (b) b.value = '';
+  _notifImg = null;
+  _notifProdSel = new Set();
+  renderNotifImgPrev();
+  renderNotifProducts();
   loadNotifHistory();
+}
+
+// Rasm tanlanganda — compressImage() bilan siqib, state'ga saqlaymiz (data: URL).
+async function onNotifImg(e) {
+  const f = (e.target.files || [])[0];
+  e.target.value = '';
+  if (!f || !/^image\//.test(f.type)) { toast('Faqat rasm faylini tanlang', 'err'); return; }
+  try { _notifImg = await compressImage(f); renderNotifImgPrev(); }
+  catch (err) { toast('Rasmni yuklashda xato', 'err'); }
+}
+function removeNotifImg() { _notifImg = null; renderNotifImgPrev(); }
+function renderNotifImgPrev() {
+  const box = $('notifImgPrev'); if (!box) return;
+  box.innerHTML = _notifImg
+    ? `<img src="${_notifImg}" alt="" style="max-width:160px;max-height:160px;border-radius:12px;display:block;object-fit:cover">
+       <button type="button" class="btn btn--ghost" style="height:32px;padding:0 12px;margin-top:6px" onclick="removeNotifImg()">Rasmni olib tashlash</button>`
+    : '';
+}
+
+// Mahsulot ko'p tanlash — openPromo() dagi .promo-picker/.promo-pick uslubi.
+function renderNotifProducts() {
+  const box = $('notifProdList'); if (!box) return;
+  box.innerHTML = products.length ? products.map(p => `
+    <div class="promo-pick ${_notifProdSel.has(p.id) ? 'on' : ''}" data-id="${p.id}" onclick="toggleNotifProd(${p.id})">
+      <div class="pchk">${ICONS.check}</div>
+      <div class="promo-thumb">${pic(p)}</div>
+      <div style="flex:1;min-width:0">
+        <b style="font-size:13px;display:block">${esc(p.n)}</b>
+        <small class="muted">${som(p.p)}${(p.old > p.p) ? ` · <span style="color:var(--red)">-${Math.round((1 - p.p / p.old) * 100)}%</span>` : ''}</small>
+      </div>
+    </div>`).join('') : '<div class="muted" style="padding:10px 0">Avval mahsulot qo\'shing</div>';
+  const c = $('notifProdCnt'); if (c) c.textContent = _notifProdSel.size;
+}
+function toggleNotifProd(id) {
+  if (_notifProdSel.has(id)) _notifProdSel.delete(id); else _notifProdSel.add(id);
+  const el = document.querySelector(`#notifProdList .promo-pick[data-id="${id}"]`);
+  if (el) el.classList.toggle('on', _notifProdSel.has(id));
+  const c = $('notifProdCnt'); if (c) c.textContent = _notifProdSel.size;
 }
 
 async function loadNotifHistory() {
@@ -257,10 +302,17 @@ async function sendNotification() {
   const btn = $('notifSendBtn');
   if (btn) { btn.disabled = true; btn.textContent = 'Yuborilmoqda...'; }
   try {
-    await Cloud.sendNotification(title, body);
+    await Cloud.sendNotification(title, body, {
+      imageUrl: _notifImg,
+      productIds: [..._notifProdSel],
+    });
     toast('Bildirishnoma yuborildi — barcha mijozlarga push ketadi');
     if ($('notifTitle')) $('notifTitle').value = '';
     if ($('notifBody')) $('notifBody').value = '';
+    _notifImg = null;
+    _notifProdSel = new Set();
+    renderNotifImgPrev();
+    renderNotifProducts();
     loadNotifHistory();
   } catch (e) {
     console.error('[notif] sendNotification:', e);

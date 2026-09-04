@@ -266,6 +266,15 @@
             <div class="form-grid" style="margin-top:14px">
               <div class="field"><label>Sarlavha</label><input class="input" id="notifTitle" maxlength="80" placeholder="Masalan: Chegirmalar boshlandi 🎉"></div>
               <div class="field" style="grid-column:1/-1"><label>Matn</label><textarea class="input" id="notifBody" rows="3" maxlength="300" placeholder="Xabar matni (ixtiyoriy)"></textarea></div>
+              <div class="field" style="grid-column:1/-1">
+                <label>Rasm (ixtiyoriy)</label>
+                <input type="file" id="notifImgInput" accept="image/*" onchange="onNotifImg(event)">
+                <div id="notifImgPrev" style="margin-top:8px"></div>
+              </div>
+              <div class="field" style="grid-column:1/-1">
+                <label>Bog'langan mahsulotlar (<span id="notifProdCnt">0</span>)</label>
+                <div class="promo-picker" id="notifProdList"></div>
+              </div>
             </div>
             <div style="margin-top:14px">
               <button class="btn btn--primary" id="notifSendBtn" onclick="sendNotification()">Yuborish</button>
