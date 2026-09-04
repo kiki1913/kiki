@@ -167,13 +167,15 @@ window.Cloud = (function () {
     // Worker (VPS) buni LISTEN/NOTIFY orqali ushlab, BARCHA qurilmalarga push
     // yuboradi (target_user_id = NULL => broadcast). Bu "admin bilan chat"dan
     // MUTLAQO alohida — chat lume_chat KV'da qoladi.
-    async sendNotification(title, body) {
+    async sendNotification(title, body, { imageUrl = null, productIds = [] } = {}) {
       if (!_sb) throw new Error("Supabase sozlanmagan — bildirishnoma yuborib bo'lmaydi");
       const { error } = await _sb.from("notifications").insert({
         title: title,
         body: body || "",
         type: "admin_broadcast",
         target_user_id: null,   // NULL = barcha foydalanuvchilarga
+        image_url: imageUrl || null,
+        product_ids: (productIds && productIds.length) ? productIds : null,
       });
       if (error) throw error;
       return true;
@@ -184,7 +186,7 @@ window.Cloud = (function () {
       if (!_sb) return [];
       const { data, error } = await _sb
         .from("notifications")
-        .select("id,title,body,type,created_at,processed")
+        .select("id,title,body,type,created_at,processed,image_url,product_ids")
         .in("type", ["admin_broadcast", "broadcast"])
         .order("created_at", { ascending: false })
         .limit(limit);
