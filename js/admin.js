@@ -61,7 +61,7 @@ const ART_KEYS = [['found', 'Tonal / found'], ['doubtless', 'Parfyum'], ['fixer'
 
 const DEFAULT_PRODUCTS = [];
 
-let products = [], orders = [], banners = [], settings = { brand: 'KIKI', phone: '+998 71 200 00 00', tg: '@lume_support', ship: 25000 };
+let products = [], orders = [], banners = [], settings = { brand: 'KIKI', phone: '+998 71 200 00 00', tg: '', ship: 25000 };
 let archivedOrders = [];  // arxivlangan (o'chirilgan) buyurtmalar — lume_orders_archive
 let promos = [];          // chegirma bo'limlari — lume_promos
 let commissions = [];     // pul o'tkazma komissiyalari — lume_commissions [{id,name,pct}]
@@ -1913,15 +1913,6 @@ function drawSettings() {
   if ($('supPassNew')) $('supPassNew').value = '';
   if ($('supPassNew2')) $('supPassNew2').value = '';
 }
-function saveSettings() {
-  settings = {
-    brand: $('setBrand').value.trim() || 'KIKI',
-    ship: +$('setShip').value.replace(/\D/g, '') || 0,
-    phone: $('setPhone').value.trim(),
-    tg: $('setTg').value.trim()
-  };
-  cset('lume_settings', settings); toast('Sozlamalar saqlandi');
-}
 
 // Bosh admin login / parol / ismini o'zgartirish (joriy parol bilan tasdiqlanadi).
 async function saveSuper() {
@@ -2359,7 +2350,7 @@ Object.assign(window, {
   onBannerFiles, moveBanner, delBanner, setStatus, delOrder, clearOrders, refreshOrders, openOrder, downloadReceipt,
   drawPromos, openPromo, setPromoStyle, togglePromoProd, savePromo, delPromo, movePromo,
   setOrdFilter, drawArxiv, restoreOrder, delArxiv, clearArxiv,
-  drawChat, sendAdminChat, refreshChat, setChatFilter, selectConv, backChat, toggleStar, toggleArchive, saveSettings, saveSuper, flip, closeModal,
+  drawChat, sendAdminChat, refreshChat, setChatFilter, selectConv, backChat, toggleStar, toggleArchive, saveSuper, flip, closeModal,
   drawUsers, userInfo, messageUser, delUser,
   openAdmin, saveAdmin, delAdmin, togglePerm, logout,
   drawBot, botSaveTest, botTestOrder, botDisconnect
