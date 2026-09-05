@@ -1827,11 +1827,8 @@ setInterval(async () => {
 
 /* ===== SETTINGS ===== */
 function drawSettings() {
-  $('setBrand').value = settings.brand || '';
-  $('setShip').value = settings.ship || '';
-  $('setPhone').value = settings.phone || '';
-  $('setTg').value = settings.tg || '';
-  $('clientLabel').textContent = window.__LUME_CLIENT || 'shop';
+  // "Do'kon sozlamalari" karti olib tashlangan — faqat "Bosh admin hisobi" qoladi.
+  if ($('clientLabel')) $('clientLabel').textContent = window.__LUME_CLIENT || 'shop';
   // Bosh admin hisobi karti — faqat bosh adminga ko'rinadi, maydonlar to'ldiriladi.
   const sc = $('superCard');
   if (sc) sc.style.display = isSuper() ? '' : 'none';
