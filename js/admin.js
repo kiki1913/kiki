@@ -71,6 +71,8 @@ let chatMsgs = [];
 let editImg = null, editKey = 'found';
 let editImgs = [];            // mahsulot rasmlari (10 tagacha). editImg = editImgs[0] (asosiy/karta rasmi)
 const MAX_PROD_IMGS = 10;
+let editColors = [];          // mahsulot ranglari (10 tagacha): [{name, hex}]
+const MAX_PROD_COLORS = 10;
 let editFit = 'contain', editZoom = 1, editPosX = 50, editPosY = 50;
 let editImgR = null, editFitR = 'contain', editZoomR = 1, editPosXR = 50, editPosYR = 50;
 function editObj() { return { img: editImg, k: editKey, fit: editFit, zoom: editZoom, pos: editPosX + '% ' + editPosY + '%' }; }
@@ -928,6 +930,8 @@ function openProd(id) {
   // Rasmlar: yangi imgs massivi bo'lsa undan, aks holda eski yagona img'dan.
   editImgs = p ? (Array.isArray(p.imgs) && p.imgs.length ? p.imgs.slice(0, MAX_PROD_IMGS) : (p.img ? [p.img] : [])) : [];
   editImg = editImgs[0] || null;
+  editColors = (p && Array.isArray(p.colors)) ? p.colors.slice(0, MAX_PROD_COLORS)
+    .map(c => ({ name: (c && c.name) || '', hex: (c && c.hex) || '#e81e8c' })) : [];
   editKey = p ? (p.k || 'found') : 'found';
   editFit = p && p.fit === 'cover' ? 'cover' : 'contain';
   editZoom = p && p.zoom ? +p.zoom : 1;
@@ -964,6 +968,15 @@ function openProd(id) {
       <div class="field"><label>Eski narx (chegirma)</label><input class="input" id="p-old" inputmode="numeric" value="${p && p.old ? p.old : ''}" placeholder="0 = yo'q"></div>
       <div class="field"><label>Tan narxi (asil narx)</label><input class="input" id="p-cost" inputmode="numeric" value="${p && p.cost ? p.cost : ''}" placeholder="Sof foyda uchun"></div>
       <div class="field span2"><label>Hajm (vergul bilan)</label><input class="input" id="p-sz" value="${esc(p && p.sz ? p.sz.join(', ') : '')}" placeholder="30ml, 50ml"></div>
+      <div class="field span2">
+        <label>Ranglar (<span id="p-col-count">${editColors.length}</span>/${MAX_PROD_COLORS})</label>
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+          <input type="color" id="p-col-hex" value="#e81e8c" style="width:46px;height:38px;border:none;background:none;padding:0;cursor:pointer">
+          <input class="input" id="p-col-name" placeholder="Rang nomi (masalan Qizil)" style="flex:1;min-width:120px" onkeydown="if(event.key==='Enter'){event.preventDefault();addProdColor()}">
+          <button type="button" class="btn btn--ghost" onclick="addProdColor()">Qo'shish</button>
+        </div>
+        <div id="p-cols-strip" style="display:flex;flex-wrap:wrap;gap:8px;margin-top:8px"></div>
+      </div>
       <div class="field span2"><label>Tavsif (o'zbekcha)</label><textarea class="input" id="p-d">${esc(p && p.d ? (p.d.uz || '') : '')}</textarea></div>
     </div>`;
   const foot = `
@@ -971,6 +984,31 @@ function openProd(id) {
     <button class="btn btn--primary" onclick="saveProd(${p ? p.id : 'null'})">Saqlash</button>`;
   openModal(p ? 'Mahsulotni tahrirlash' : 'Yangi mahsulot', body, foot);
   renderProdImgs();
+  renderProdColors();
+}
+
+// Ranglar tasmasini chizadi — har birida swatch + nom + o'chirish.
+function renderProdColors() {
+  const box = $('p-cols-strip'); if (!box) return;
+  box.innerHTML = editColors.map((c, i) => `
+    <div style="display:inline-flex;align-items:center;gap:6px;padding:4px 8px 4px 5px;border:1px solid var(--line);border-radius:20px">
+      <span style="width:18px;height:18px;border-radius:50%;background:${esc(c.hex || '#ccc')};border:1px solid rgba(128,128,128,.4)"></span>
+      <span style="font-size:12.5px">${esc(c.name || c.hex || '')}</span>
+      <button type="button" onclick="removeProdColor(${i})" title="O'chirish" style="border:none;background:none;color:var(--text-3);cursor:pointer;font-size:14px;line-height:1">✕</button>
+    </div>`).join('');
+  const cnt = $('p-col-count'); if (cnt) cnt.textContent = editColors.length;
+}
+function addProdColor() {
+  if (editColors.length >= MAX_PROD_COLORS) { toast(`Ko'pi bilan ${MAX_PROD_COLORS} ta rang`, 'err'); return; }
+  const hex = ($('p-col-hex') && $('p-col-hex').value) || '#e81e8c';
+  const name = ($('p-col-name') && $('p-col-name').value || '').trim();
+  editColors.push({ name, hex });
+  if ($('p-col-name')) $('p-col-name').value = '';
+  renderProdColors();
+}
+function removeProdColor(i) {
+  editColors.splice(i, 1);
+  renderProdColors();
 }
 // Rasmlar tasmasini (thumbnails) chizadi — har birida "asosiy qilish" va "o'chirish".
 function renderProdImgs() {
@@ -1069,6 +1107,7 @@ async function saveProd(id) {
     p, old: +$('p-old').value.replace(/\D/g, '') || 0,
     cost: +$('p-cost').value.replace(/\D/g, '') || 0,
     sz: $('p-sz').value.split(',').map(s => s.trim()).filter(Boolean),
+    colors: editColors.slice(0, MAX_PROD_COLORS).map(c => ({ name: c.name || '', hex: c.hex || '' })),
     k: editKey,
     imgs: editImgs.slice(0, MAX_PROD_IMGS),
     img: editImgs[0] || null,  // birinchi rasm — karta rasmi (eski moslik uchun)
@@ -1282,7 +1321,7 @@ const OSTAT = {
   done: ['Yetkazib berildi', 'done'], cancel: ['Bekor', 'cancel']
 };
 function orderRow(o) {
-  const items = (o.items || []).map(it => `${esc(it.n)} ×${it.q}`).join(', ');
+  const items = (o.items || []).map(it => `${esc(it.n)}${it.color ? ' (' + esc(it.color) + ')' : ''} ×${it.q}`).join(', ');
   const st = OSTAT[o.status] || ['—', 'pending'];
   return `<tr>
     <td><b>${esc(o.id || '')}</b><br><small class="muted">${o.ts ? new Date(o.ts).toLocaleString('ru-RU') : ''}</small></td>
@@ -1342,7 +1381,7 @@ function drawArxiv() {
     : `<tr><td colspan="6"><div class="empty"><div class="e-emo">🗑️</div><h4>Arxiv bo'sh</h4><p class="muted">O'chirilgan buyurtmalar shu yerda saqlanadi.</p></div></td></tr>`;
 }
 function arxivRow(o) {
-  const items = (o.items || []).map(it => `${esc(it.n)} ×${it.q}`).join(', ');
+  const items = (o.items || []).map(it => `${esc(it.n)}${it.color ? ' (' + esc(it.color) + ')' : ''} ×${it.q}`).join(', ');
   const st = OSTAT[o.status] || ['—', 'pending'];
   return `<tr>
     <td><b>${esc(o.id || '')}</b><br><small class="muted">${o.ts ? new Date(o.ts).toLocaleString('ru-RU') : ''}</small></td>
@@ -1425,7 +1464,7 @@ function openOrder(id) {
     const img = p ? pic(p) : art();
     return `<div class="ord-item">
       <div class="ord-item-img">${img}</div>
-      <div class="ord-item-info"><b>${esc(it.n)}</b><small class="muted">${som(it.p)} × ${it.q}</small></div>
+      <div class="ord-item-info"><b>${esc(it.n)}</b><small class="muted">${it.color ? 'Rang: ' + esc(it.color) + ' · ' : ''}${som(it.p)} × ${it.q}</small></div>
       <div class="ord-item-sum num">${som((+it.p || 0) * (+it.q || 1))}</div>
     </div>`;
   }).join('') || '<div class="muted" style="padding:8px 0">Mahsulot yo\'q</div>';
@@ -1479,7 +1518,7 @@ function downloadReceipt(id) {
   const ship = Math.max(0, (+o.total || 0) - itemsSum);
   const brand = esc(settings.brand || 'KIKI');
   const rows = (o.items || []).map(it =>
-    `<tr><td>${esc(it.n)}</td><td class="c">${it.q}</td><td class="r">${som(it.p)}</td><td class="r">${som((+it.p || 0) * (+it.q || 1))}</td></tr>`).join('');
+    `<tr><td>${esc(it.n)}${it.color ? ' (' + esc(it.color) + ')' : ''}</td><td class="c">${it.q}</td><td class="r">${som(it.p)}</td><td class="r">${som((+it.p || 0) * (+it.q || 1))}</td></tr>`).join('');
   const html = `<!doctype html><html lang="uz"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Chek ${esc(o.id)}</title>
 <style>
   body{font-family:Arial,Helvetica,sans-serif;max-width:440px;margin:24px auto;color:#111;padding:0 18px}
@@ -1911,7 +1950,7 @@ async function tgApi(token, method, params) {
 }
 // Buyurtmani chiroyli HTML xabarga aylantirish (ilovadagi format bilan bir xil)
 function formatOrderMsg(o) {
-  const lines = (o.items || []).map(it => `• ${esc(it.n)} × ${it.q} — ${som((it.p || 0) * (it.q || 1))}`).join('\n');
+  const lines = (o.items || []).map(it => `• ${esc(it.n)}${it.color ? ' (' + esc(it.color) + ')' : ''} × ${it.q} — ${som((it.p || 0) * (it.q || 1))}`).join('\n');
   const pay = ({ card: 'Karta (Uzcard / Humo)', payme: 'Payme', click: 'Click', cash: 'Naqd' })[o.pay] || 'Naqd';
   return `🛒 <b>Yangi buyurtma</b>  ${esc(o.id || '')}\n` +
     `🏬 <b>${esc(settings.brand || 'KIKI')}</b>\n\n` +
@@ -2280,6 +2319,7 @@ function fmtDate() {
 Object.assign(window, {
   nav, drawStats, setStatsPeriod, addCommission, delCommission, saveExpenses,
   openProd, saveProd, delProd, refreshPrev, setFit, onImg, removeImgAt, makeMainImg, renderProdImgs,
+  addProdColor, removeProdColor, renderProdColors,
   openCat, saveCat, delCat, onCatImg, onCatImgR, removeCatImg, removeCatImgR, setCatFit, setCatFitR, refreshCatPrev, refreshCatPrevR,
   onBannerFiles, moveBanner, delBanner, setStatus, delOrder, clearOrders, refreshOrders, openOrder, downloadReceipt,
   drawPromos, openPromo, setPromoStyle, togglePromoProd, savePromo, delPromo, movePromo,
