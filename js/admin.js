@@ -373,19 +373,34 @@ function onBannerFiles(e) {
   const files = [...(e.target.files || [])]; e.target.value = '';
   if (!files.length) return;
   let pending = files.length;
-  files.forEach(f => compressBanner(f, out => {
-    banners.push({ id: Date.now() + Math.floor(Math.random() * 100000), img: out });
-    if (--pending === 0) { cset('lume_banners', banners); drawBanners(); toast('Baner qo\'shildi'); }
+  const added = [];
+  files.forEach(f => compressBanner(f, async out => {
+    added.push({ id: Date.now() + Math.floor(Math.random() * 100000), img: out });
+    if (--pending === 0) {
+      // refresh → merge → write: boshqa admin qo'shgan banerlar yo'qolmasin.
+      await Cloud.refresh();
+      _reloadBanners();
+      banners.push(...added);
+      cset('lume_banners', banners); drawBanners(); toast('Baner qo\'shildi');
+    }
   }));
 }
-function moveBanner(i, dir) {
-  const j = i + dir; if (j < 0 || j >= banners.length) return;
-  const t = banners[i]; banners[i] = banners[j]; banners[j] = t;
+async function moveBanner(i, dir) {
+  const a = banners[i], b = banners[i + dir]; if (!a || !b) return;
+  await Cloud.refresh();
+  _reloadBanners();
+  const ia = banners.findIndex(x => x.id === a.id), ib = banners.findIndex(x => x.id === b.id);
+  if (ia < 0 || ib < 0) { drawBanners(); return; }
+  const t = banners[ia]; banners[ia] = banners[ib]; banners[ib] = t;
   cset('lume_banners', banners); drawBanners();
 }
-function delBanner(i) {
+async function delBanner(i) {
   if (!confirm('Baner rasmi o\'chirilsinmi?')) return;
-  banners.splice(i, 1); cset('lume_banners', banners); drawBanners(); toast('O\'chirildi');
+  const b = banners[i]; if (!b) return;
+  await Cloud.refresh();
+  _reloadBanners();
+  banners = banners.filter(x => x.id !== b.id);
+  cset('lume_banners', banners); drawBanners(); toast('O\'chirildi');
 }
 
 /* ===== CHEGIRMA BO'LIMLARI ===== */
@@ -476,26 +491,40 @@ function togglePromoProd(id) {
   if (el) el.classList.toggle('on', _promoSel.has(id));
   const c = $('pr-cnt'); if (c) c.textContent = _promoSel.size;
 }
-function savePromo(id) {
+async function savePromo(id) {
   const title = $('pr-title').value.trim();
   if (!title) { toast('Sarlavha kiriting', 'err'); return; }
   const items = products.filter(p => _promoSel.has(p.id)).map(p => p.id);
   if (!items.length) { toast('Kamida bitta mahsulot tanlang', 'err'); return; }
   const obj = { title, style: _promoStyle, items };
-  if (id) { const i = promos.findIndex(x => x.id === id); if (i >= 0) promos[i] = Object.assign({}, promos[i], obj); }
-  else { obj.id = 'pr' + Date.now().toString(36) + Math.floor(Math.random() * 100); promos.push(obj); }
+  await Cloud.refresh();
+  _reloadPromos();
+  if (id) {
+    const i = promos.findIndex(x => x.id === id);
+    if (i >= 0) promos[i] = Object.assign({}, promos[i], obj);
+    else { obj.id = id; promos.push(obj); }
+  } else {
+    obj.id = 'pr' + Date.now().toString(36) + Math.floor(Math.random() * 100);
+    promos.push(obj);
+  }
   cset('lume_promos', promos);
   closeModal(); drawPromos(); toast('Saqlandi');
 }
-function delPromo(id) {
+async function delPromo(id) {
   const s = promos.find(x => x.id === id); if (!s) return;
   if (!confirm(`"${s.title}" bo'limi o'chirilsinmi?`)) return;
+  await Cloud.refresh();
+  _reloadPromos();
   promos = promos.filter(x => x.id !== id);
   cset('lume_promos', promos); drawPromos(); toast('O\'chirildi');
 }
-function movePromo(i, dir) {
-  const j = i + dir; if (j < 0 || j >= promos.length) return;
-  const t = promos[i]; promos[i] = promos[j]; promos[j] = t;
+async function movePromo(i, dir) {
+  const a = promos[i], b = promos[i + dir]; if (!a || !b) return;
+  await Cloud.refresh();
+  _reloadPromos();
+  const ia = promos.findIndex(x => x.id === a.id), ib = promos.findIndex(x => x.id === b.id);
+  if (ia < 0 || ib < 0) { drawPromos(); return; }
+  const t = promos[ia]; promos[ia] = promos[ib]; promos[ib] = t;
   cset('lume_promos', promos); drawPromos();
 }
 
@@ -1131,6 +1160,24 @@ function _reloadProducts() {
   const cp = cget('lume_products', null);
   products = Array.isArray(cp) ? cp.map((p, i) => Object.assign({ id: p.id || i + 1 }, p)) : [];
 }
+// Boshqa bo'limlar uchun ham "refresh → merge → write" — global'ni serverdagi eng
+// yangi qiymatдan qayta yuklaydi (boshqa admin qo'shganini yo'qotmaslik uchun).
+function _reloadCats() {
+  const cc = cget('lume_categories', null);
+  categories = Array.isArray(cc) ? cc.map((c, i) => Object.assign({ id: c.id || i + 1 }, c)) : DEFAULT_CATS.map(c => Object.assign({}, c));
+}
+function _reloadBanners() {
+  const cb = cget('lume_banners', null);
+  banners = Array.isArray(cb) ? cb.filter(b => b && b.img) : [];
+}
+function _reloadPromos() {
+  const cpr = cget('lume_promos', null);
+  promos = Array.isArray(cpr) ? cpr.filter(x => x && x.id) : [];
+}
+function _reloadAdmins() {
+  const ca = cget('lume_admins', null);
+  admins = Array.isArray(ca) ? ca.filter(a => a && a.login && a.id) : [];
+}
 async function saveProd(id) {
   const n = $('p-n').value.trim();
   const p = +$('p-p').value.replace(/\D/g, '');
@@ -1325,7 +1372,7 @@ function openCat(id) {
   refreshCatPrev();
   refreshCatPrevR();
 }
-function saveCat(id) {
+async function saveCat(id) {
   const n = $('c-n').value.trim();
   if (!n) { toast('Toifa nomini kiriting', 'err'); return }
   const emo = $('c-emo').value.trim();
@@ -1334,15 +1381,26 @@ function saveCat(id) {
     img: editImg || null, fit: editFit, zoom: editZoom, pos: editPosX + '% ' + editPosY + '%',
     imgR: editImgR || null, fitR: editFitR, zoomR: editZoomR, posR: editPosXR + '% ' + editPosYR + '%'
   };
-  if (id) { const i = categories.findIndex(x => x.id === id); if (i >= 0) categories[i] = Object.assign({}, categories[i], obj); }
-  else { obj.id = (categories.reduce((m, x) => Math.max(m, x.id || 0), 0) || 0) + 1; categories.push(obj); }
+  // refresh → merge → write: boshqa admin qo'shgan toifalar yo'qolmasin.
+  await Cloud.refresh();
+  _reloadCats();
+  if (id) {
+    const i = categories.findIndex(x => x.id === id);
+    if (i >= 0) categories[i] = Object.assign({}, categories[i], obj);
+    else { obj.id = id; categories.push(obj); }
+  } else {
+    obj.id = Date.now(); // noyob id — ikki admin bir xil id yaratmasligi uchun
+    categories.push(obj);
+  }
   cset('lume_categories', categories);
   closeModal(); drawCats(); toast('Saqlandi');
 }
-function delCat(id) {
+async function delCat(id) {
   const used = products.filter(p => p.c == id).length;
   const msg = used ? `${used} ta mahsulot shu toifada. Baribir o'chirilsinmi?` : 'Toifa o\'chirilsinmi?';
   if (!confirm(msg)) return;
+  await Cloud.refresh();
+  _reloadCats();
   categories = categories.filter(x => x.id !== id);
   cset('lume_categories', categories);
   drawCats();
@@ -1676,6 +1734,36 @@ setInterval(async () => {
   _botSig = sig;
   botCfg = cfg;
   drawBot();
+}, 10000);
+
+// Toifalar bo'limi ochiq bo'lsa — boshqa admin qo'shgani ko'rinishi uchun yangilaymiz.
+let _catsSig = '';
+setInterval(async () => {
+  const sec = $('sec-cats');
+  if (!sec || !sec.classList.contains('is-active')) return;
+  await Cloud.refresh();
+  _reloadCats();
+  const sig = JSON.stringify(categories.map(c => [c.id, c.name, !!c.img]));
+  if (sig === _catsSig) return;
+  _catsSig = sig;
+  drawCats();
+}, 10000);
+
+// Baner + Chegirma bo'limi ochiq bo'lsa — boshqa admin qo'shgani ko'rinishi uchun.
+let _banSig = '';
+setInterval(async () => {
+  const sec = $('sec-banner');
+  if (!sec || !sec.classList.contains('is-active')) return;
+  await Cloud.refresh();
+  _reloadBanners();
+  _reloadPromos();
+  const sig = JSON.stringify([
+    banners.map(b => b.id),
+    promos.map(p => [p.id, p.title, (p.items || []).length]),
+  ]);
+  if (sig === _banSig) return;
+  _banSig = sig;
+  drawBanners(); // drawPromos'ni ham chaqiradi
 }, 10000);
 
 /* ===== XABARLAR (chat) — ikki ustunli ===== */
@@ -2154,26 +2242,37 @@ function openAdmin(id) {
   openModal(a ? 'Adminni tahrirlash' : 'Yangi admin', body, foot);
 }
 function togglePerm(el) { el.classList.toggle('on'); }
-function saveAdmin(id) {
+async function saveAdmin(id) {
   const name = $('a-name').value.trim();
   const login = $('a-login').value.trim();
   const pass = $('a-pass').value;
   if (!login) { toast('Login kiriting', 'err'); return; }
   if (!pass) { toast('Parol kiriting', 'err'); return; }
   if (login.toLowerCase() === superAcc().login.toLowerCase()) { toast('Bu login band (bosh admin)', 'err'); return; }
-  const dup = admins.find(x => x.login.toLowerCase() === login.toLowerCase() && x.id !== id);
-  if (dup) { toast('Bu login allaqachon mavjud', 'err'); return; }
   const perms = [...document.querySelectorAll('#permList .perm-item.on')].map(el => el.dataset.p);
   if (!perms.length) { toast('Kamida bitta menyu belgilang', 'err'); return; }
+  // refresh → merge → write: boshqa admin qo'shgan adminlar yo'qolmasin.
+  await Cloud.refresh();
+  _reloadAdmins();
+  const dup = admins.find(x => x.login.toLowerCase() === login.toLowerCase() && x.id !== id);
+  if (dup) { toast('Bu login allaqachon mavjud', 'err'); return; }
   const obj = { name: name || login, login, pass, perms };
-  if (id) { const i = admins.findIndex(x => x.id === id); if (i >= 0) admins[i] = Object.assign({}, admins[i], obj); }
-  else { obj.id = 'a' + Date.now().toString(36) + Math.floor(Math.random() * 1000); admins.push(obj); }
+  if (id) {
+    const i = admins.findIndex(x => x.id === id);
+    if (i >= 0) admins[i] = Object.assign({}, admins[i], obj);
+    else { obj.id = id; admins.push(obj); }
+  } else {
+    obj.id = 'a' + Date.now().toString(36) + Math.floor(Math.random() * 1000);
+    admins.push(obj);
+  }
   cset('lume_admins', admins);
   closeModal(); drawAdmins(); toast('Saqlandi');
 }
-function delAdmin(id) {
+async function delAdmin(id) {
   const a = admins.find(x => x.id === id); if (!a) return;
   if (!confirm(`"${a.name || a.login}" admini o'chirilsinmi?`)) return;
+  await Cloud.refresh();
+  _reloadAdmins();
   admins = admins.filter(x => x.id !== id);
   cset('lume_admins', admins); drawAdmins(); toast('O\'chirildi');
 }
