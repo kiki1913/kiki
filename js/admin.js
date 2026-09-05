@@ -976,6 +976,7 @@ function openProd(id) {
           <button type="button" class="btn btn--ghost" onclick="addProdColor()">Qo'shish</button>
         </div>
         <div id="p-cols-strip" style="display:flex;flex-wrap:wrap;gap:8px;margin-top:8px"></div>
+        <div id="p-cols-lib"></div>
       </div>
       <div class="field span2"><label>Tavsif (o'zbekcha)</label><textarea class="input" id="p-d">${esc(p && p.d ? (p.d.uz || '') : '')}</textarea></div>
     </div>`;
@@ -997,6 +998,7 @@ function renderProdColors() {
       <button type="button" onclick="removeProdColor(${i})" title="O'chirish" style="border:none;background:none;color:var(--text-3);cursor:pointer;font-size:14px;line-height:1">✕</button>
     </div>`).join('');
   const cnt = $('p-col-count'); if (cnt) cnt.textContent = editColors.length;
+  renderColorLibrary(); // editColors o'zgarganda kutubxonani ham yangilaymiz
 }
 function addProdColor() {
   if (editColors.length >= MAX_PROD_COLORS) { toast(`Ko'pi bilan ${MAX_PROD_COLORS} ta rang`, 'err'); return; }
@@ -1008,6 +1010,39 @@ function addProdColor() {
 }
 function removeProdColor(i) {
   editColors.splice(i, 1);
+  renderProdColors();
+}
+
+// Barcha mahsulotlardan ishlatilgan ranglar ro'yxati (hex bo'yicha noyob).
+function usedColorLibrary() {
+  const seen = new Map();
+  (products || []).forEach(pr => (pr.colors || []).forEach(c => {
+    if (!c || !c.hex) return;
+    const key = String(c.hex).toLowerCase();
+    if (!seen.has(key)) seen.set(key, { name: c.name || '', hex: c.hex });
+  }));
+  return [...seen.values()];
+}
+let _colorLib = [];
+// Oldin ishlatilgan ranglar — bosib qo'shsa bo'ladi (allaqachon qo'shilganlari chiqmaydi).
+function renderColorLibrary() {
+  const box = $('p-cols-lib'); if (!box) return;
+  _colorLib = usedColorLibrary().filter(c =>
+    !editColors.some(e => String(e.hex).toLowerCase() === String(c.hex).toLowerCase()));
+  if (!_colorLib.length) { box.innerHTML = ''; return; }
+  box.innerHTML = `<div class="muted" style="font-size:12px;margin:10px 0 5px">Oldin ishlatilgan ranglar (bosib qo'shing):</div>
+    <div style="display:flex;flex-wrap:wrap;gap:8px">` +
+    _colorLib.map((c, i) => `
+      <button type="button" onclick="useExistingColor(${i})" title="${esc(c.name || c.hex)}" style="display:inline-flex;align-items:center;gap:6px;padding:4px 10px 4px 5px;border:1px solid var(--line);border-radius:20px;background:none;color:var(--text);cursor:pointer">
+        <span style="width:16px;height:16px;border-radius:50%;background:${esc(c.hex)};border:1px solid rgba(128,128,128,.4)"></span>
+        <span style="font-size:12px">${esc(c.name || c.hex)}</span>
+      </button>`).join('') + `</div>`;
+}
+function useExistingColor(i) {
+  const c = _colorLib[i]; if (!c) return;
+  if (editColors.length >= MAX_PROD_COLORS) { toast(`Ko'pi bilan ${MAX_PROD_COLORS} ta rang`, 'err'); return; }
+  if (editColors.some(e => String(e.hex).toLowerCase() === String(c.hex).toLowerCase())) return;
+  editColors.push({ name: c.name || '', hex: c.hex });
   renderProdColors();
 }
 // Rasmlar tasmasini (thumbnails) chizadi — har birida "asosiy qilish" va "o'chirish".
@@ -2319,7 +2354,7 @@ function fmtDate() {
 Object.assign(window, {
   nav, drawStats, setStatsPeriod, addCommission, delCommission, saveExpenses,
   openProd, saveProd, delProd, refreshPrev, setFit, onImg, removeImgAt, makeMainImg, renderProdImgs,
-  addProdColor, removeProdColor, renderProdColors,
+  addProdColor, removeProdColor, renderProdColors, useExistingColor, renderColorLibrary,
   openCat, saveCat, delCat, onCatImg, onCatImgR, removeCatImg, removeCatImgR, setCatFit, setCatFitR, refreshCatPrev, refreshCatPrevR,
   onBannerFiles, moveBanner, delBanner, setStatus, delOrder, clearOrders, refreshOrders, openOrder, downloadReceipt,
   drawPromos, openPromo, setPromoStyle, togglePromoProd, savePromo, delPromo, movePromo,
